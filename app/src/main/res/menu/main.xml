@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:icon="@android:drawable/ic_menu_manage">
+
+    <item
+        android:id="@+id/action_setKValue"
+        android:orderInCategory="100"
+        android:title="设置GenerationSize" />
+    <item
+        android:id="@+id/action_openAppFolder"
+        android:orderInCategory="100"
+        android:title="打开工作目录" />
+
+    <item
+        android:id="@+id/action_description"
+        android:orderInCategory="100"
+        android:title="参数说明"
+        app:showAsAction="never"
+        />
+</menu>
