@@ -74,6 +74,7 @@ public class PieceFile {
         int row = coeffMatrix.length;
         int myRank = row;
         int[][] testMatrix = new int[row + 1][nK];
+        //在此使用一维矩阵
         System.arraycopy(coeffMatrix, 0, testMatrix, 0, row);
         //认为对方的系数矩阵的秩也会这个值
         int itsRow = itsCoeffMatrix.length;
@@ -81,9 +82,9 @@ public class PieceFile {
             //拼接在最后一行
             System.arraycopy(itsCoeffMatrix[i], 0, testMatrix[row], 0, nK);
             //计算拼接之后的秩
-            //NCUtils.nc_acquire();
-            int nRank = NCUtils.getRank(testMatrix, row + 1, nK);
-            //NCUtils.nc_release();
+            NCUtils.nc_acquire();
+            int nRank = NCUtils.getRank(IntAndBytes.int2Array_byte1Array(testMatrix), row + 1, nK);
+            NCUtils.nc_release();
             if (nRank == (myRank + 1)) {
                 return true;
             }
@@ -134,9 +135,9 @@ public class PieceFile {
             System.arraycopy(bt_coefM, 0, testCoeff, 0, row);
             System.arraycopy(coeff[0], 0, testCoeff[row], 0, nK);
             //计算秩
-            // NCUtils.nc_acquire();
-            int rank = NCUtils.getRank(IntAndBytes.byteArray2IntArray(testCoeff), row + 1, nK);
-            //NCUtils.nc_release();
+            NCUtils.nc_acquire();
+            int rank = NCUtils.getRank(IntAndBytes.byte2Array_byte1Array(testCoeff), row + 1, nK);
+            NCUtils.nc_release();
             if (rank == nRank) {
                 //证明数据没用
                 file.delete();
@@ -151,7 +152,7 @@ public class PieceFile {
                     @Override
                     public void run() {
                         //没有正在再编码，则开始再编码
-                        if(!isReencoding()) {
+                        if (!isReencoding()) {
                             re_encodeFile();
                         }
                     }
@@ -167,14 +168,14 @@ public class PieceFile {
     }
 
     //获取再编码文件
-    public File getReencodeFile() {
+    public String getReencodeFile() {
         ArrayList<File> files = MyFileUtils.getListFiles(re_encodeFilePath);
         int size = files.size();
         if (size == 0) {
             //生成在编码文件
             if (isReencoding) {
                 //等待编码结束
-                while(isReencoding){
+                while (isReencoding) {
                     try {
                         Thread.sleep(100);
                     } catch (InterruptedException e) {
@@ -182,17 +183,17 @@ public class PieceFile {
                     }
                 }
                 ArrayList<File> fileArrayList = MyFileUtils.getListFiles(re_encodeFilePath);
-                return fileArrayList.get(0);
+                return fileArrayList.get(0).getPath();
             } else {
-                File reEncodeFile = re_encodeFile();
-                return reEncodeFile;
+                String filePath = re_encodeFile();
+                return filePath;
             }
 
         }
         if (size > 1) {
             System.out.println("再编码文件大于1");
         }
-        return files.get(0);
+        return files.get(0).getPath();
     }
 
     //检查文件长度是否合法 编码系数是否有重复
@@ -253,53 +254,47 @@ public class PieceFile {
     //对文件进行再编码   需要访问jni
     //需要在一个独立线程中运行
     //因为会分配较大内存，所以规定每次之后一个可以进入
-    public File re_encodeFile() {
-      synchronized (PieceFile.class) {
-          isReencoding = true;
-          //从编码文件路径中取出文件
-          List<File> fileList = checkFileLen();
-          if (fileList == null) {
-              //检查长度时出错
-              return null;
-          }
-          int fileNum = fileList.size();
-
-          //如果只有一个编码文件的话，那就不用再编码
-          if (fileNum == 1) {
-              File file = fileList.get(0);
-              //MyFileUtils.copyFile(file, re_encodeFilePath);
-              return file;
-          }
-          //注意：用于再编码的文件长度必定都是一样的
-          int fileLen = (int) (fileList.get(0).length());
-          //用于存文件数组
-          byte[][] fileData = new byte[fileNum][fileLen];
-          for (int i = 0; i < fileNum; ++i) {
-              File file = fileList.get(i);
-              try {
-                  InputStream in = new FileInputStream(file);
-                  //b = new byte[fileLen];
-                  in.read(fileData[i]);    //读取文件中的内容到b[]数组
-                  in.close();
-              } catch (IOException e) {
-                  //Toast.makeText(this, "读取文件异常", Toast.LENGTH_SHORT).show();
-                  e.printStackTrace();
-                  return null;
-              }
-          }
-          //NCUtils.nc_acquire();
-          //存再编码结果
-          byte[][] reEncodeData = new byte[1][fileLen];
-          //随机编码
-          reEncodeData = NCUtils.reencode(fileData, 1);
-          //NCUtils.nc_release();
-          //删除之前的再编码文件
-          MyFileUtils.deleteAllFile(re_encodeFilePath, false);
-          String fileName = pieceNo + "." + LocalInfor.getCurrentTime("MMddHHmmssSSS") + ".nc"; //pieceNo.time.re  //格式
-          File re_encodeFile = MyFileUtils.writeToFile(re_encodeFilePath, fileName, reEncodeData[0]);
-          isReencoding = false;
-          return re_encodeFile;
-      }
+    //返回再编码文件的路径
+    public String re_encodeFile() {
+        isReencoding = true;
+        //从编码文件路径中取出文件
+        List<File> fileList = checkFileLen();
+        if (fileList == null) {
+            //检查长度时出错
+            //   return null;
+        }
+        int fileNum = fileList.size();
+        //如果只有一个编码文件的话，那就不用再编码
+        if (fileNum == 1) {
+            File file = fileList.get(0);
+            return file.getPath();
+        }
+        //注意：用于再编码的文件长度必定都是一样的
+        int fileLen = (int) (fileList.get(0).length());
+        //用于存文件数组  一维数组存储
+        byte[] fileData = new byte[fileNum * fileLen];
+        for (int i = 0; i < fileNum; ++i) {
+            File file = fileList.get(i);
+            try {
+                FileInputStream fis = new FileInputStream(file);
+                //读取fileLen个字节，放入filedata中，从i*fileData位置开始写
+                fis.read(fileData, i * fileLen, fileLen);    //读取文件中的内容到b[]数组
+                fis.close();
+            } catch (IOException e) {
+                //Toast.makeText(this, "读取文件异常", Toast.LENGTH_SHORT).show();
+                e.printStackTrace();
+                //  return null;
+            }
+        }
+        //存再编码结果
+        NCUtils.nc_acquire();
+        byte[] reEncodeData = NCUtils.reencode(fileData, fileNum, fileLen);
+        NCUtils.nc_release();
+        MyFileUtils.deleteAllFile(re_encodeFilePath, false);
+        String fileName = pieceNo + "." + LocalInfor.getCurrentTime("MMddHHmmssSSS") + ".nc"; //pieceNo.time.re  //格式
+        File re_encodeFile = MyFileUtils.writeToFile(re_encodeFilePath, fileName, reEncodeData);
+        isReencoding = false;
+        return re_encodeFile.getPath();
     }
 
     //对文件进行解码     需要访问jni
@@ -315,15 +310,14 @@ public class PieceFile {
             return false;
         }
         int fileLen = (int) fileList.get(0).length();
-        //用于存文件数组
-        byte[][] fileData = new byte[nK][fileLen];   //如果文件很多，也只需nK个文件
-
+        //用于存文件数组  存入一维数组
+        byte[] fileData = new byte[nK * fileLen];   //如果文件很多，也只需nK个文件
         for (int i = 0; i < nK; ++i) {
             File file = fileList.get(i);
             try {
                 InputStream in = new FileInputStream(file);
                 //b = new byte[fileLen];
-                in.read(fileData[i]);    //读取文件中的内容到b[]数组
+                in.read(fileData, i * fileLen, fileLen);    //读取文件中的内容到b[]数组
                 in.close();
             } catch (IOException e) {
                 //Toast.makeText(this, "读取文件异常", Toast.LENGTH_SHORT).show();
@@ -331,29 +325,15 @@ public class PieceFile {
                 return false;
             }
         }
-
-        // NCUtils.nc_acquire();
-        //存解码结果
-        int col = fileLen - 1 - nK;
-        byte[][] origin_data = NCUtils.decode(fileData);
-        //origin_data = NCUtils.Decode(fileData, nK, fileLen);
-        //NCUtils.nc_release();
+        //int col = fileLen - 1 - nK;
+        NCUtils.nc_acquire();
+        byte[] origin_data = NCUtils.decode(fileData, nK, fileLen);
+        NCUtils.nc_release();
         if (origin_data == null) {
             return false;
         }
-
-        //二维转化为一维
-        int origin_file_len = nK * col;
-        byte[] originData = new byte[origin_file_len];
-        int ii = 0;
-        for (int i = 0; i < nK; ++i) {
-            for (int j = 0; j < col; ++j) {
-                originData[ii] = origin_data[i][j];
-                ++ii;
-            }
-        }
         //写入文件
-        MyFileUtils.writeToFile(pieceFilePath, pieceNo + ".decode", originData);
+        MyFileUtils.writeToFile(pieceFilePath, pieceNo + ".decode", origin_data);
         return true;
     }
 

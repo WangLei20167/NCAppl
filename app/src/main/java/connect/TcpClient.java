@@ -81,6 +81,14 @@ public class TcpClient {
                                 "对方的一次文件请求应答完成");
                         serviceAcquire();
                         continue;
+                    } else if (fileNameOrOrder.contains(",")) {
+                        //这个是文件请求信息
+                        SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
+                                Constant.TCP_ServerIP + "发起文件请求" + ",请求码" + fileNameOrOrder);
+                        //新开的线程
+                        //为了保证发送和接收是互不影响的
+                        solveFileRequest(fileNameOrOrder);
+                        continue;
                     } else {
                         filePath = getEncodeFileStrogePath(fileNameOrOrder);
                     }
@@ -131,6 +139,43 @@ public class TcpClient {
         }
     }
 
+    //处理文件请求信息   请求信息包含,逗号 , DataOutputStream dos
+    public void solveFileRequest(String requestOrder) {
+        String[] strParts = requestOrder.split(",");
+        for (String strPart : strParts) {
+            if (!strPart.equals("")) {
+                int partNo = Integer.parseInt(strPart);
+                //在本地找信息
+                for (final PieceFile pieceFile : localEncodeFile.getPieceFileList()) {
+                    if (pieceFile.getPieceNo() == partNo) {
+                        String reEncodeFilePath = pieceFile.getReencodeFile();
+                        //发送给用户
+                        sendfile(reEncodeFilePath, true);
+                        //发送完后，再重新编码文件
+                        new Thread(new Runnable() {
+                            @Override
+                            public void run() {
+                                if (!pieceFile.isReencoding()) {
+                                    pieceFile.re_encodeFile();
+                                }
+                            }
+                        }).start();
+                        break;
+                    }
+                }
+            }
+        }
+        //一次请求应答完成   告知对方
+        SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
+                "应答完成，告知对方");
+        try {
+            dos.writeUTF(Constant.ANSWER_END);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+    }
+
     public void parseXML(File file) {
         itsEncodeFile = EncodeFile.xml2object(file, false);
         SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
@@ -152,7 +197,7 @@ public class TcpClient {
         }
         //把xml文件发给server
         String xmlFilePath = localEncodeFile.getStoragePath() + File.separator + "xml.txt";
-        sendfile(xmlFilePath);
+        sendfile(xmlFilePath,false);
         //根据对方的xml文件查看是否拥有对自己有用的数据
         //如果有的话，则请求
         // 给服务器端发送文件请求
@@ -245,7 +290,7 @@ public class TcpClient {
         }
     }
 
-    public void sendfile(String filepath) {
+    public void sendfile(String filepath, boolean deleteFile) {
         int nLen = 0;
         byte[] sendbytes = null;
         try {
@@ -260,6 +305,9 @@ public class TcpClient {
             while ((nLen = fis.read(sendbytes, 0, sendbytes.length)) > 0) {
                 dos.write(sendbytes, 0, nLen);
                 dos.flush();
+            }
+            if (deleteFile) {
+                file.delete();
             }
             //SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0, "Send finish");
         } catch (IOException e) {

@@ -58,6 +58,38 @@ public class IntAndBytes {
         return bt_matrix;
     }
 
+    //把二维的int数组转化为一维的byte[]数组
+    public static byte[] int2Array_byte1Array(int[][] matrix) {
+        int row = matrix.length;
+        int col = matrix[0].length;
+        byte[] bt_matrix = new byte[row * col];
+        for (int i = 0; i < row; ++i) {
+            for (int j = 0; j < col; ++j) {
+                int element = matrix[i][j];
+                if (element < -128 || element > 255) {
+                    //转化失败
+                    return null;
+                }
+                //超过127的int会转化为负值
+                bt_matrix[i * col + j] = (byte) element;
+            }
+        }
+        return bt_matrix;
+    }
+
+    //把二维的byte数组转化为一维的byte[]数组
+    public static byte[] byte2Array_byte1Array(byte[][] origin) {
+        int row = origin.length;
+        int col = origin[0].length;
+        byte[] result = new byte[row * col];
+        for (int i = 0; i < row; ++i) {
+            for (int j = 0; j < col; ++j) {
+                result[i * col + j] = origin[i][j];
+            }
+        }
+        return result;
+    }
+
     // byte数组转化为int数组
     public static int[][] byteArray2IntArray(byte[][] b) {
         int row = b.length;

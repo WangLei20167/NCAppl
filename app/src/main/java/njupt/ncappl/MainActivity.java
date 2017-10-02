@@ -34,7 +34,9 @@ import connect.TcpClient;
 import connect.TcpServer;
 import connect.WifiAdmin;
 import fileSlices.EncodeFile;
+import fileSlices.PieceFile;
 import msg.MsgValue;
+import nc.NCUtils;
 import utils.LocalInfor;
 import utils.MyFileUtils;
 
@@ -69,6 +71,10 @@ public class MainActivity extends AppCompatActivity {
         //TCPServer和TCPClient的管理类
         tcpSvr = new TcpServer(handler);
         tcpClient = new TcpClient(handler);
+        //初始化有限域
+//        NCUtils.nc_acquire();
+//        NCUtils.InitGalois();
+//        NCUtils.nc_release();
 
         tv_promptMsg = (TextView) findViewById(R.id.tv_promptMsg);
         scrollView = (ScrollView) findViewById(R.id.scrollView);
@@ -135,6 +141,22 @@ public class MainActivity extends AppCompatActivity {
                         .show();
             }
         });
+    }
+
+    //测试方法
+    public void onTest(View view) {
+        if (encodeFile != null) {
+            for (final PieceFile pieceFile : encodeFile.getPieceFileList()) {
+
+                new Thread(new Runnable() {
+                    @Override
+                    public void run() {
+                        pieceFile.re_encodeFile();
+                    }
+                }).start();
+
+            }
+        }
     }
 
     //运行Server
@@ -250,7 +272,7 @@ public class MainActivity extends AppCompatActivity {
                     encodeFile = new EncodeFile(file.getName(), GenerationSize, null);
                     //编码
                     encodeFile.cutFile(file);
-                    //encodeFile.recoveryFile();
+                    encodeFile.recoveryFile();
                 }
             }).start();
         }
@@ -296,6 +318,10 @@ public class MainActivity extends AppCompatActivity {
 
         } else {
             //退出前的处理操作
+            //释放有限域
+//            NCUtils.nc_acquire();
+//            NCUtils.UninitGalois();
+//            NCUtils.nc_release();
             //执行退出操作,并释放资源
             finish();
             //Dalvik VM的本地方法完全退出app

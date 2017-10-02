@@ -116,12 +116,12 @@ public class TcpServer {
         public void run() {
             //发送给client xml文件
             String xmlFilePath = encodeFile.getStoragePath() + File.separator + "xml.txt";
-            sendFiles(xmlFilePath, dos);
+            sendFiles(xmlFilePath, dos, false);
             byte[] getBytes = new byte[1024];
             while (socket.isConnected()) {
                 try {
                     //获取文件名称  或是指令   在此做一个判断
-                    String fileNameOrOrder = in.readUTF();
+                    final String fileNameOrOrder = in.readUTF();
                     //创建存储地址
                     String filePath = "";
                     if (fileNameOrOrder.equals("xml.txt")) {
@@ -130,17 +130,20 @@ public class TcpServer {
                         //这个是文件请求信息
                         SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
                                 client_ip + "发起文件请求" + ",请求码" + fileNameOrOrder);
+                        //新开的线程
+                        //为了保证发送和接收是互不影响的
                         solveFileRequest(fileNameOrOrder, dos);
                         continue;
                     }
                     //获取文件长度
                     int fileLen = in.readInt();
                     File file = new File(filePath);
-                    if (file.exists()) {
-                        file.delete();
-                        file.createNewFile();
-                    }
-                    FileOutputStream fos = new FileOutputStream(file, true);  //覆盖写
+//                    if (file.exists()) {
+//                        file.delete();
+//                        file.createNewFile();
+//                    }
+                    //FileOutputStream fos = new FileOutputStream(file, true);  //覆盖写
+                    FileOutputStream fos = new FileOutputStream(file);  //覆盖写
                     //fos = new FileOutputStream(myFile, true);  //续写
                     //BufferedOutputStream bos = new BufferedOutputStream(fos);
                     int nLen = 0;
@@ -164,14 +167,19 @@ public class TcpServer {
                     SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0, fileNameOrOrder + "接收完成");
                 } catch (IOException e) {
                     e.printStackTrace();
+                    socketList.remove(socket);
                     break;
                 }
             }
         }
-
     }
 
-    public void sendFiles(String filepath, DataOutputStream dos) {
+    /**
+     * @param filepath
+     * @param dos
+     * @param deleteFile 发送完成后是否删除文件
+     */
+    public void sendFiles(String filepath, DataOutputStream dos, boolean deleteFile) {
         try {
             File file = new File(filepath);
             FileInputStream fis = new FileInputStream(file);
@@ -185,6 +193,11 @@ public class TcpServer {
             while ((nLen = fis.read(sendbytes, 0, sendbytes.length)) > 0) {
                 dos.write(sendbytes, 0, nLen);
                 dos.flush();
+            }
+            SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
+                    file.getName() + "发送完成");
+            if (deleteFile) {
+                file.delete();
             }
         } catch (IOException e) {
             e.printStackTrace();
@@ -200,13 +213,10 @@ public class TcpServer {
                 //在本地找信息
                 for (final PieceFile pieceFile : encodeFile.getPieceFileList()) {
                     if (pieceFile.getPieceNo() == partNo) {
-                        File reEncodeFile = pieceFile.getReencodeFile();
+                        String reEncodeFilePath = pieceFile.getReencodeFile();
                         //发送给用户
-                        sendFiles(reEncodeFile.getPath(), dos);
-                        SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
-                                reEncodeFile.getName()+"发送完成");
+                        sendFiles(reEncodeFilePath, dos, true);
                         //发送完后，再重新编码文件
-                        reEncodeFile.delete();
                         new Thread(new Runnable() {
                             @Override
                             public void run() {
@@ -215,6 +225,7 @@ public class TcpServer {
                                 }
                             }
                         }).start();
+                        break;
                     }
                 }
             }
