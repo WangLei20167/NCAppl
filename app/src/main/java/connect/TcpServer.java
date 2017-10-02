@@ -21,6 +21,7 @@ import appData.GlobalVar;
 import fileSlices.EncodeFile;
 import fileSlices.PieceFile;
 import msg.MsgValue;
+import utils.MyFileUtils;
 
 /**
  * Created by kingstones on 2017/9/27.
@@ -32,6 +33,8 @@ public class TcpServer {
     private ExecutorService mExecutorService = null;   //线程池
     private Handler handler;
     private EncodeFile encodeFile;
+
+    private EncodeFile itsEncodeFile;
 
     public TcpServer(Handler handler) {
         this.handler = handler;
@@ -126,6 +129,12 @@ public class TcpServer {
                     String filePath = "";
                     if (fileNameOrOrder.equals("xml.txt")) {
                         filePath = GlobalVar.getTempPath() + File.separator + "xml.txt";
+                    } else if (fileNameOrOrder.equals(Constant.ANSWER_END)) {
+                        //一次服务请求结束  再次请求服务
+                        SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
+                                "对方的一次文件请求应答完成");
+                        serviceAcquire(dos);
+                        continue;
                     } else if (fileNameOrOrder.contains(",")) {
                         //这个是文件请求信息
                         SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
@@ -134,6 +143,8 @@ public class TcpServer {
                         //为了保证发送和接收是互不影响的
                         solveFileRequest(fileNameOrOrder, dos);
                         continue;
+                    } else if (fileNameOrOrder.contains(".")) {
+                        filePath = getEncodeFileStrogePath(fileNameOrOrder);
                     }
                     //获取文件长度
                     int fileLen = in.readInt();
@@ -162,9 +173,17 @@ public class TcpServer {
                     }
                     if (fileNameOrOrder.equals("xml.txt")) {
                         //解析xml文件
-                        // parseXML(file);
+                        //解析xml文件
+                        SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
+                                "已获取到对方的xml配置文件，正在解析");
+                        parseXML(file, dos);
+                    }else {
+                        //处理收到文件后的EncodeFile变量更新
+                        SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0, fileNameOrOrder +
+                                "接收完成");
+                        solveFileChange(file);
                     }
-                    SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0, fileNameOrOrder + "接收完成");
+                    //SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0, fileNameOrOrder + "接收完成");
                 } catch (IOException e) {
                     e.printStackTrace();
                     socketList.remove(socket);
@@ -204,6 +223,50 @@ public class TcpServer {
         }
     }
 
+    public void parseXML(File file, DataOutputStream dos) {
+        itsEncodeFile = EncodeFile.xml2object(file, false);
+        SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
+                "解析完成，正在查看是否拥有对自己有用的数据");
+        //根据对方的xml文件查看是否拥有对自己有用的数据
+        //如果有的话，则请求
+        // 给服务器端发送文件请求
+        serviceAcquire(dos);
+    }
+
+    //服务请求
+    public void serviceAcquire(DataOutputStream dos) {
+        if (itsEncodeFile == null) {
+            return;
+        }
+        String usefulParts = encodeFile.findUsefulParts(itsEncodeFile);
+        if (!usefulParts.equals("")) {
+            SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
+                    "对方拥有对我有用的数据，向对方发送文件请求");
+            try {
+                dos.writeUTF(usefulParts);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        } else {
+            new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    if (encodeFile.getCurrentSmallPiece() == encodeFile.getTotalSmallPiece()) {
+                        SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
+                                "本地已拥有所有的编码数据片，正在解码");
+                        if (encodeFile.recoveryFile()) {
+                            SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
+                                    encodeFile.getFileName() + "解码成功");
+                        } else {
+                            SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
+                                    "解码失败");
+                        }
+                    }
+                }
+            }).start();
+        }
+    }
+
     //处理文件请求信息   请求信息包含,逗号
     public void solveFileRequest(String requestOrder, DataOutputStream dos) {
         String[] strParts = requestOrder.split(",");
@@ -239,6 +302,57 @@ public class TcpServer {
             e.printStackTrace();
         }
 
+    }
+    //接收到文件后   改变EncodeFile变量
+    public void solveFileChange(File file) {
+        String fileName = file.getName();
+        String strPartNo = fileName.substring(0, fileName.indexOf("."));
+        int partNo = Integer.parseInt(strPartNo);
+        for (PieceFile pieceFile : encodeFile.getPieceFileList()) {
+            if (pieceFile.getPieceNo() == partNo) {
+                if (pieceFile.addEncodeFile(file)) {
+                    //更改已收到的编码数据片的个数
+                    encodeFile.updateCurrentSmallPiece();
+                    //写入xml配置文件
+                    encodeFile.object2xml();
+                }
+                break;
+            }
+        }
+    }
+
+    //获取文件存储地址
+    public String getEncodeFileStrogePath(String encodeFileName) {
+        String filePath = "";
+        String strPartNo = encodeFileName.substring(0, encodeFileName.indexOf("."));
+        int partNo = Integer.parseInt(strPartNo);
+        //构建文件存储路径
+        for (PieceFile pieceFile : encodeFile.getPieceFileList()) {
+            if (pieceFile.getPieceNo() == partNo) {
+                filePath = pieceFile.getEncodeFilePath() + File.separator + encodeFileName;
+                break;
+            }
+        }
+        //本地编码数据中没有此部分文件
+        if (filePath.equals("")) {
+            int rightFileLen = 0;
+            if (partNo == encodeFile.getTotalParts()) {
+                rightFileLen = encodeFile.getRightFileLen2();
+            } else {
+                rightFileLen = encodeFile.getRightFileLen1();
+            }
+            PieceFile pieceFile = new PieceFile(
+                    encodeFile.getStoragePath(),
+                    partNo,
+                    encodeFile.getnK(),
+                    rightFileLen
+            );
+            //添加进列表
+            encodeFile.getPieceFileList().add(pieceFile);
+            encodeFile.setCurrentParts(encodeFile.getCurrentParts() + 1);
+            filePath = pieceFile.getEncodeFilePath() + File.separator + encodeFileName;
+        }
+        return filePath;
     }
 
     //本类发送消息的方法

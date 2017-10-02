@@ -89,18 +89,18 @@ public class TcpClient {
                         //为了保证发送和接收是互不影响的
                         solveFileRequest(fileNameOrOrder);
                         continue;
-                    } else {
+                    } else if(fileNameOrOrder.contains(".")){
                         filePath = getEncodeFileStrogePath(fileNameOrOrder);
                     }
                     //获取文件长度
                     int fileLen = in.readInt();
                     File file = new File(filePath);
                     //在此需要对同名文件做处理
-                    if (file.exists()) {
-                        file.delete();
-                        file.createNewFile();
-                    }
-                    FileOutputStream fos = new FileOutputStream(file, true);  //覆盖写
+//                    if (file.exists()) {
+//                        file.delete();
+//                        file.createNewFile();
+//                    }
+                    FileOutputStream fos = new FileOutputStream(file);  //覆盖写
                     //fos = new FileOutputStream(myFile, true);  //续写
                     //BufferedOutputStream bos = new BufferedOutputStream(fos);
                     int nLen = 0;
@@ -175,6 +175,7 @@ public class TcpClient {
         }
 
     }
+
 
     public void parseXML(File file) {
         itsEncodeFile = EncodeFile.xml2object(file, false);
@@ -309,6 +310,8 @@ public class TcpClient {
             if (deleteFile) {
                 file.delete();
             }
+            SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
+                    file.getName() + "发送完成");
             //SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0, "Send finish");
         } catch (IOException e) {
             e.printStackTrace();
