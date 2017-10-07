@@ -5,7 +5,8 @@ package connect;
  */
 
 public class Constant {
-    public final static String SSID="NCsharing";
+    //ssid的格式是 NCSharing+手机唯一识别码
+    public final static String SSID = "NCSharing";
     //定义AP密码
     public final static String AP_PASS_WORD = "123456789";
     //作为Server时的监听地址与端口
@@ -13,6 +14,6 @@ public class Constant {
 
     public final static int TCP_ServerPORT = 9000;
     //指令
-    public final static String ANSWER_END="answerEnd";  //一次应答结束
+    public final static String ANSWER_END = "answerEnd";  //一次应答结束
 
 }

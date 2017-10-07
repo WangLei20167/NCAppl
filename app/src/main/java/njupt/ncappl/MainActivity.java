@@ -154,7 +154,6 @@ public class MainActivity extends AppCompatActivity {
                         pieceFile.re_encodeFile();
                     }
                 }).start();
-
             }
         }
     }
@@ -188,15 +187,20 @@ public class MainActivity extends AppCompatActivity {
             public void run() {
                 //此处做打开wifi的操作
                 wifiAdmin.openWifi();
-                wifiAdmin.searchWifi(Constant.SSID);
+                String ssid = wifiAdmin.searchWifi(Constant.SSID);
+                if (ssid == null) {
+                    System.out.println("查找指定ssid失败");
+                    return;
+                }
+                //连接网络的操作
                 wifiAdmin.addNetwork(
-                        wifiAdmin.CreateWifiInfo(Constant.SSID, Constant.AP_PASS_WORD, 3)
+                        wifiAdmin.CreateWifiInfo(ssid, Constant.AP_PASS_WORD, 3)
                 );
                 //等待连接的时间为10s
                 // Starting time.
                 long startMili = System.currentTimeMillis();
                 while (!wifiAdmin.isWifiConnected()) {
-                    if (wifiAdmin.currentConnectSSID().equals(Constant.SSID)) {
+                    if (wifiAdmin.currentConnectSSID().equals(ssid)) {
                         break;
                     }
                     //等待连接
@@ -268,11 +272,14 @@ public class MainActivity extends AppCompatActivity {
             new Thread(new Runnable() {
                 @Override
                 public void run() {
-
+                    SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
+                            "正在对"+file.getName()+"进行再编码");
                     encodeFile = new EncodeFile(file.getName(), GenerationSize, null);
                     //编码
                     encodeFile.cutFile(file);
-                    encodeFile.recoveryFile();
+                    //encodeFile.recoveryFile();
+                    SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
+                            "编码完成");
                 }
             }).start();
         }

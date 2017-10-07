@@ -207,7 +207,8 @@ public class EncodeFile {
                         "pieceFilePath",
                         "encodeFilePath",
                         "re_encodeFilePath",
-                        "isReencoding"
+                        "isReencoding",
+                        "haveSendFile"
                 });
         //XStream xStream = new XStream(new DomDriver("UTF-8"));
         XStream xStream = new XStream(new Sun14ReflectionProvider(new FieldDictionary(sorter)));

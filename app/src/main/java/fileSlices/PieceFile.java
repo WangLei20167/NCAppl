@@ -44,9 +44,16 @@ public class PieceFile {
     @XStreamOmitField
     private String re_encodeFilePath;
 
-    //用以标志本部分文件是否发生了改变
+    //用以标志是否正在再编码
     @XStreamOmitField
-    private boolean isReencoding = false;
+    private volatile boolean isReencoding = false;
+    //当把准备把文件发送给一个用户时
+    //把此位置位false
+    //监听此位   如果是false，则重新生成再编码文件
+    @XStreamOmitField
+    private volatile boolean haveSendFile = true;
+//    @XStreamOmitField
+//    private volatile String sendFilePath = null;
 
     public PieceFile(String path, int pieceNo, int nK, int rightFileLen) {
         this.pieceNo = pieceNo;
@@ -174,7 +181,7 @@ public class PieceFile {
         if (size == 0) {
             //生成在编码文件
             if (isReencoding) {
-                //等待编码结束
+                //等待再编码结束
                 while (isReencoding) {
                     try {
                         Thread.sleep(100);
@@ -427,5 +434,13 @@ public class PieceFile {
 
     public void setReencoding(boolean reencoding) {
         isReencoding = reencoding;
+    }
+
+    public boolean isHaveSendFile() {
+        return haveSendFile;
+    }
+
+    public void setHaveSendFile(boolean haveSendFile) {
+        this.haveSendFile = haveSendFile;
     }
 }

@@ -9,6 +9,8 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 
 
+import appData.GlobalVar;
+
 import static android.content.Context.WIFI_SERVICE;
 
 /**
@@ -78,7 +80,7 @@ public class APHelper {
 //        wifiCfg.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.NONE);
 //        wifiCfg.wepTxKeyIndex = 0;
 
-        wifiCfg.SSID = Constant.SSID;
+        wifiCfg.SSID = GlobalVar.getSsidImei();
         wifiCfg.preSharedKey = Constant.AP_PASS_WORD;
         wifiCfg.allowedAuthAlgorithms.set(WifiConfiguration.AuthAlgorithm.OPEN);
         //WPA

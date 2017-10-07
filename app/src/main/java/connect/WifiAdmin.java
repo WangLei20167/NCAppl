@@ -82,7 +82,7 @@ public class WifiAdmin {
     }
 
     //得到当前WIFI是否可用
-    private boolean wifiEnable(){
+    private boolean wifiEnable() {
         return mWifiManager.isWifiEnabled();
     }
 
@@ -181,16 +181,17 @@ public class WifiAdmin {
     }
 
 
-    //搜索是否存在指定ssid的网络，存在返回对应的bssid
-    public boolean searchWifi(String ssid) {
-        String bssid = "";   //相同ssid按bssid来识别
+    //搜索是否存在指定ssid包含的网络，存在返回对应的ssid
+    public String searchWifi(String ssid) {
+        //String bssid = "";   //相同ssid按bssid来识别
         //在以保存的wifi信息中找ssid，若存在，则先删除
-        WifiConfiguration tempConfig = this.IsExsits(ssid);
-        if (tempConfig != null) {
-            mWifiManager.removeNetwork(tempConfig.networkId);
-        }
+//        WifiConfiguration tempConfig = this.IsExsits(ssid);
+//        if (tempConfig != null) {
+//            mWifiManager.removeNetwork(tempConfig.networkId);
+//        }
         //标志是否找到指定的ssid
-        boolean find=false;
+        boolean find = false;
+        ScanResult scanResult0 = null;
         do {
             //扫描网络列表
             mWifiManager.startScan();
@@ -198,24 +199,36 @@ public class WifiAdmin {
             List<ScanResult> mWifiList = mWifiManager.getScanResults();
             for (int i = 0; i < mWifiList.size(); ++i) {
                 //检查有没有ssid
-                if (mWifiList.get(i).SSID.equals(ssid)) {
+//                if (mWifiList.get(i).SSID.equals(ssid)) {
+//                    int level = mWifiList.get(i).level;
+//                    //level的值为-100到0的值，值越小，信号越差
+//                    //0到-50，最佳
+//                    //-50到-70,较好
+//                    //-70到-80,一般
+//                    //-80到-100，最差
+//                    if (level > -80) {
+//                        //信号大于-80，质量一般
+//                        bssid = mWifiList.get(i).BSSID;
+//                        find = true;
+//                        break;
+//                    }
+//                }
+                ScanResult scanResult = mWifiList.get(i);
+                //找到包含 NCSharing的SSID进行连接
+                if (scanResult.SSID.indexOf(Constant.SSID) == 0) {
+                    //连接最好信号的网络
                     int level = mWifiList.get(i).level;
-                    //level的值为-100到0的值，值越小，信号越差
-                    //0到-50，最佳
-                    //-50到-70,较好
-                    //-70到-80,一般
-                    //-80到-100，最差
-                    if (level > -80) {
-                        //信号大于-80，质量一般
-                        bssid = mWifiList.get(i).BSSID;
-                        find=true;
-                        break;
+                    if (scanResult0 == null) {
+                        scanResult0 = scanResult;
+                    } else if (level > scanResult0.level) {
+                        scanResult0 = scanResult;
                     }
+                    find = true;
                 }
             }
-            if(find){
+            if (find) {
                 break;
-            }else {
+            } else {
                 try {
                     Thread.sleep(100);
                 } catch (InterruptedException e) {
@@ -223,11 +236,20 @@ public class WifiAdmin {
                 }
             }
         } while (mWifiManager.isWifiEnabled());
-        return find;
+        if (scanResult0 != null) {
+            String resultSSID = scanResult0.SSID;
+            WifiConfiguration tempConfig = this.IsExsits(resultSSID);
+            if (tempConfig != null) {
+                mWifiManager.removeNetwork(tempConfig.networkId);
+            }
+            return resultSSID;
+        } else {
+            return null;
+        }
     }
 
     //获取当前wifi连接的ssid
-    public String currentConnectSSID(){
+    public String currentConnectSSID() {
         WifiInfo wifiInfo = mWifiManager.getConnectionInfo();
         return wifiInfo.getSSID();
     }

@@ -21,7 +21,6 @@ import appData.GlobalVar;
 import fileSlices.EncodeFile;
 import fileSlices.PieceFile;
 import msg.MsgValue;
-import utils.MyFileUtils;
 
 /**
  * Created by kingstones on 2017/9/27.
@@ -76,6 +75,8 @@ public class TcpServer {
                 }
             }
             socketList.add(client);
+            SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
+                    client.getInetAddress()+"已连接");
             //启动一个线程处理与client的对话
             try {
                 mExecutorService.execute(new ClientThread(client)); //启动一个新的线程来处理连接
@@ -280,6 +281,8 @@ public class TcpServer {
                         //发送给用户
                         sendFiles(reEncodeFilePath, dos, true);
                         //发送完后，再重新编码文件
+                        //此位置位false，当检测到时，启动再编码
+                        pieceFile.setHaveSendFile(false);
                         new Thread(new Runnable() {
                             @Override
                             public void run() {
