@@ -9,8 +9,11 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.net.SocketAddress;
 import java.util.ArrayList;
+import java.util.concurrent.Semaphore;
 
 import appData.GlobalVar;
 import fileSlices.EncodeFile;
@@ -26,6 +29,7 @@ public class TcpClient {
     private Socket socket = null;
     private DataInputStream in = null;   //接收
     private DataOutputStream dos = null; //发送文件
+    public Semaphore dos_Semaphore = new Semaphore(1);
     //private OutputStream outputstream = null;
     private Handler handler;
     //本地的编码文件
@@ -44,23 +48,52 @@ public class TcpClient {
                 socket = null;
             }
             localEncodeFile = null;
-            try {
-                socket = new Socket(Constant.TCP_ServerIP, Constant.TCP_ServerPORT);
-            } catch (IOException e) {
-                e.printStackTrace();
-                System.out.println("connect to AP failed.");
-                return;
+            //socket = new Socket(Constant.TCP_ServerIP, Constant.TCP_ServerPORT);
+//            socket = new Socket();
+//            SocketAddress endpoint = new InetSocketAddress(Constant.TCP_ServerIP, Constant.TCP_ServerPORT);
+//            socket.setSendBufferSize(1 * 1024 * 1024);
+//            socket.setReceiveBufferSize(1 * 1024 * 1024);
+            //实现一个socket创建3秒延迟的作用
+            long startTime = System.currentTimeMillis();
+            while (true) {
+                try {
+                    socket = new Socket(Constant.TCP_ServerIP, Constant.TCP_ServerPORT);
+                    //socket.connect(endpoint);  //连接3秒超时
+                    break;
+                } catch (IOException e) {
+                    e.printStackTrace();
+                    long endTime = System.currentTimeMillis();
+                    if ((endTime - startTime) > 3000) {
+                        System.out.println("连接socket失败");
+                        SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0, "连接ServerSocket失败");
+                        return;
+                    } else {
+                        //等待0.1秒重连
+                        try {
+                            Thread.sleep(100);
+                        } catch (InterruptedException e1) {
+                            e1.printStackTrace();
+                        }
+                    }
+                }
             }
+
             SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0, "连接ServerSocket成功");
+            socket.setReceiveBufferSize(1 * 1024 * 1024);
+            socket.setSendBufferSize(1 * 1024 * 1024);
             socket.setTcpNoDelay(true);
             in = new DataInputStream(socket.getInputStream());     //接收
             dos = new DataOutputStream(socket.getOutputStream());//发送
+            int revSize = socket.getReceiveBufferSize();
+            int sendSize = socket.getSendBufferSize();
+            System.out.println("接收缓存区" + revSize + "   发送缓存区" + sendSize + " ");
             RevThread revThread = new RevThread();
             revThread.start();
         } catch (IOException e) {
             e.printStackTrace();
         }
-        //连接成功
+        //连接成功   循环检测生成再编码文件
+        reencodeListenerThread();
     }
 
     class RevThread extends Thread {
@@ -89,7 +122,7 @@ public class TcpClient {
                         //为了保证发送和接收是互不影响的
                         solveFileRequest(fileNameOrOrder);
                         continue;
-                    } else if(fileNameOrOrder.contains(".")){
+                    } else if (fileNameOrOrder.contains(".")) {
                         filePath = getEncodeFileStrogePath(fileNameOrOrder);
                     }
                     //获取文件长度
@@ -133,6 +166,14 @@ public class TcpClient {
                 } catch (IOException e) {
                     e.printStackTrace();
                     System.out.println("TcpClient Socket已经关闭");
+                    //在此启动对本地encodefile变量的异常处理操作
+                    socketExceptionHandle();
+                    break;
+                } catch (ArrayIndexOutOfBoundsException e) {
+                    e.printStackTrace();
+                    System.out.println("（client）对方的socket突然关闭，造成的异常退出");
+                    //在此启动对本地encodefile变量的异常处理操作
+                    socketExceptionHandle();
                     break;
                 }
             }
@@ -140,40 +181,50 @@ public class TcpClient {
     }
 
     //处理文件请求信息   请求信息包含,逗号 , DataOutputStream dos
-    public void solveFileRequest(String requestOrder) {
-        String[] strParts = requestOrder.split(",");
-        for (String strPart : strParts) {
-            if (!strPart.equals("")) {
-                int partNo = Integer.parseInt(strPart);
-                //在本地找信息
-                for (final PieceFile pieceFile : localEncodeFile.getPieceFileList()) {
-                    if (pieceFile.getPieceNo() == partNo) {
-                        String reEncodeFilePath = pieceFile.getReencodeFile();
-                        //发送给用户
-                        sendfile(reEncodeFilePath, true);
-                        //发送完后，再重新编码文件
-                        new Thread(new Runnable() {
-                            @Override
-                            public void run() {
-                                if (!pieceFile.isReencoding()) {
-                                    pieceFile.re_encodeFile();
-                                }
+    public void solveFileRequest(final String requestOrder) {
+        Thread solveFileReqThread = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                System.out.println("（client)发送文件线程已经在运行");
+                String[] strParts = requestOrder.split(",");
+                for (String strPart : strParts) {
+                    if (!strPart.equals("")) {
+                        int partNo = Integer.parseInt(strPart);
+                        //在本地找信息
+                        for (final PieceFile pieceFile : localEncodeFile.getPieceFileList()) {
+                            if (pieceFile.getPieceNo() == partNo) {
+                                String reEncodeFilePath = pieceFile.getReencodeFile();
+                                //发送给用户
+                                sendfile(reEncodeFilePath, true);
+                                //发送完后，再重新编码文件
+//                                new Thread(new Runnable() {
+//                                    @Override
+//                                    public void run() {
+//                                        if (!pieceFile.isReencoding()) {
+//                                            pieceFile.re_encodeFile();
+//                                        }
+//                                    }
+//                                }).start();
+                                break;
                             }
-                        }).start();
-                        break;
+                        }
                     }
                 }
+                //一次请求应答完成   告知对方
+                SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
+                        "应答完成，告知对方");
+                try {
+                    dos_Semaphore.acquire();
+                    dos.writeUTF(Constant.ANSWER_END);
+                    dos_Semaphore.release();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
             }
-        }
-        //一次请求应答完成   告知对方
-        SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
-                "应答完成，告知对方");
-        try {
-            dos.writeUTF(Constant.ANSWER_END);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-
+        });
+        solveFileReqThread.start();
     }
 
 
@@ -198,7 +249,7 @@ public class TcpClient {
         }
         //把xml文件发给server
         String xmlFilePath = localEncodeFile.getStoragePath() + File.separator + "xml.txt";
-        sendfile(xmlFilePath,false);
+        sendfile(xmlFilePath, false);
         //根据对方的xml文件查看是否拥有对自己有用的数据
         //如果有的话，则请求
         // 给服务器端发送文件请求
@@ -215,8 +266,12 @@ public class TcpClient {
             SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
                     "对方拥有对我有用的数据，向对方发送文件请求");
             try {
+                dos_Semaphore.acquire();
                 dos.writeUTF(usefulParts);
+                dos_Semaphore.release();
             } catch (IOException e) {
+                e.printStackTrace();
+            } catch (InterruptedException e) {
                 e.printStackTrace();
             }
         } else {
@@ -300,6 +355,7 @@ public class TcpClient {
             FileInputStream fis = new FileInputStream(file);
             String fileName = file.getName();
             //outputstream.write(fileName.getBytes());
+            dos_Semaphore.acquire();
             dos.writeUTF(fileName);
             dos.writeInt((int) file.length());
             sendbytes = new byte[1024];
@@ -307,6 +363,7 @@ public class TcpClient {
                 dos.write(sendbytes, 0, nLen);
                 dos.flush();
             }
+            dos_Semaphore.release();
             if (deleteFile) {
                 file.delete();
             }
@@ -315,8 +372,54 @@ public class TcpClient {
             //SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0, "Send finish");
         } catch (IOException e) {
             e.printStackTrace();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
         }
 
+    }
+
+    //一个循环检测线程   当检测到haveSendFile变量为false时，启动再编码
+    //注意：TCPClient关闭时，此处需要关闭
+    public void reencodeListenerThread() {
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                //清空发送缓存中没来得及删除的文件
+                if (localEncodeFile != null) {
+                    for (PieceFile pieceFile : localEncodeFile.getPieceFileList()) {
+                        MyFileUtils.deleteAllFile(pieceFile.getSendBufferPath(), false);
+                    }
+                }
+                while (true) {
+                    if (localEncodeFile == null) {
+
+                    } else {
+                        for (PieceFile pieceFile : localEncodeFile.getPieceFileList()) {
+                            if (!pieceFile.isHaveSendFile()) {
+                                if (!pieceFile.isReencoding()) {
+                                    pieceFile.re_encodeFile();
+                                }
+                            }
+                        }
+                    }
+                    try {
+                        Thread.sleep(100);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                }
+            }
+        }).start();
+    }
+
+    //socket突然断开后，对本地变量做的异常处理
+    public synchronized void socketExceptionHandle() {
+        if (localEncodeFile == null) {
+            return;
+        }
+        for (PieceFile pieceFile : localEncodeFile.getPieceFileList()) {
+            pieceFile.handleDataSynError();
+        }
     }
 
     //本类发送消息的方法

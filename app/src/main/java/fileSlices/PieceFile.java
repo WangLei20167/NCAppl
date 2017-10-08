@@ -43,6 +43,9 @@ public class PieceFile {
     private String encodeFilePath;
     @XStreamOmitField
     private String re_encodeFilePath;
+    //用来暂存将要发送的文件
+    @XStreamOmitField
+    private String sendBufferPath;
 
     //用以标志是否正在再编码
     @XStreamOmitField
@@ -52,6 +55,7 @@ public class PieceFile {
     //监听此位   如果是false，则重新生成再编码文件
     @XStreamOmitField
     private volatile boolean haveSendFile = true;
+
 //    @XStreamOmitField
 //    private volatile String sendFilePath = null;
 
@@ -64,6 +68,8 @@ public class PieceFile {
         //两个二级目录
         encodeFilePath = MyFileUtils.creatFolder(pieceFilePath, "encodeFiles");
         re_encodeFilePath = MyFileUtils.creatFolder(pieceFilePath, "re_encodeFile");
+
+        sendBufferPath=MyFileUtils.creatFolder(pieceFilePath,"sendBuffer");
     }
 
     /**
@@ -154,16 +160,18 @@ public class PieceFile {
                 //更新系数矩阵
                 coeffMatrix = IntAndBytes.byteArray2IntArray(testCoeff);
                 currentFileNum = row + 1;
+
                 //重新生成再编码文件
-                new Thread(new Runnable() {
-                    @Override
-                    public void run() {
-                        //没有正在再编码，则开始再编码
-                        if (!isReencoding()) {
-                            re_encodeFile();
-                        }
-                    }
-                }).start();
+                haveSendFile = false;
+//                new Thread(new Runnable() {
+//                    @Override
+//                    public void run() {
+//                        //没有正在再编码，则开始再编码
+//                        if (!isReencoding()) {
+//                            re_encodeFile();
+//                        }
+//                    }
+//                }).start();
                 return true;
             } else {
                 //未知错误
@@ -175,47 +183,75 @@ public class PieceFile {
     }
 
     //获取再编码文件
-    public String getReencodeFile() {
-        ArrayList<File> files = MyFileUtils.getListFiles(re_encodeFilePath);
-        int size = files.size();
-        if (size == 0) {
-            //生成在编码文件
-            if (isReencoding) {
-                //等待再编码结束
-                while (isReencoding) {
-                    try {
-                        Thread.sleep(100);
-                    } catch (InterruptedException e) {
-                        e.printStackTrace();
-                    }
-                }
-                ArrayList<File> fileArrayList = MyFileUtils.getListFiles(re_encodeFilePath);
-                return fileArrayList.get(0).getPath();
-            } else {
-                String filePath = re_encodeFile();
-                return filePath;
+    public synchronized String getReencodeFile() {
+        while (!haveSendFile) {
+            System.out.println("获取文件时,haveSendFile为false," + "正在循环等待再编码文件");
+            try {
+                Thread.sleep(100);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
             }
-
         }
-        if (size > 1) {
-            System.out.println("再编码文件大于1");
-        }
-        return files.get(0).getPath();
+        ArrayList<File> fileArrayList = MyFileUtils.getListFiles(re_encodeFilePath);
+        File file = fileArrayList.get(0);
+        System.out.println("已获取到再编码文件,正在剪切");
+        File transferFile = MyFileUtils.transferFile(file, sendBufferPath);
+        haveSendFile = false;
+        return transferFile.getPath();
+//        ArrayList<File> files = MyFileUtils.getListFiles(re_encodeFilePath);
+//        int size = files.size();
+//        if (size == 0) {
+//            //生成在编码文件
+//
+////            if (isReencoding) {
+////                //等待再编码结束
+////                while (isReencoding) {
+////                    try {
+////                        Thread.sleep(100);
+////                    } catch (InterruptedException e) {
+////                        e.printStackTrace();
+////                    }
+////                }
+////                ArrayList<File> fileArrayList = MyFileUtils.getListFiles(re_encodeFilePath);
+////                return fileArrayList.get(0).getPath();
+////            } else {
+////                String filePath = re_encodeFile();
+////                return filePath;
+////            }
+//        }
+//        if (size > 1) {
+//            System.out.println("再编码文件大于1");
+//        }
+//        haveSendFile = false;
+//        return files.get(0).getPath();
     }
 
     //检查文件长度是否合法 编码系数是否有重复
+    //若要获取encodefile需用此方法获取文件列表
     public ArrayList<File> checkFileLen() {
         ArrayList<File> fileList = MyFileUtils.getList_1_files(encodeFilePath);
         int fileNum = fileList.size();
-        //检查下系数有多少行系数
-        if (currentFileNum != fileNum) {
-            currentFileNum = fileNum;
+        for (File file : fileList) {
+            int fileLen = (int) file.length();
+            if (fileLen != rightFileLen) {
+                file.delete();
+                System.out.println("找到有文件不符合长度要求，删除");
+            }
         }
+        //此处应该加大文件合法性的校验
+        //1、首字节是否为nK
+        //2、编码系数是否在系数矩阵中
+        //检查下系数有多少行系数
+        ArrayList<File> fileList1 = MyFileUtils.getList_1_files(encodeFilePath);
+//        int fileNum1 = fileList1.size();
+//        if (currentFileNum != fileNum1) {
+//            currentFileNum = fileNum1;
+//        }
         //说明文件数目和系数矩阵的行数是否一致
 //        if(coeffMatrix.length!=fileNum){
 //            //不一致   就说明出现了系数矩阵和文件出现了严重的数据同步错误
 //        }
-        return fileList;
+        return fileList1;
     }
 
     //对文件进行编码，这里其实只是用单位矩阵进行封装
@@ -263,6 +299,7 @@ public class PieceFile {
     //因为会分配较大内存，所以规定每次之后一个可以进入
     //返回再编码文件的路径
     public String re_encodeFile() {
+        System.out.println(pieceNo + "正在进行再编码");
         isReencoding = true;
         //从编码文件路径中取出文件
         List<File> fileList = checkFileLen();
@@ -301,6 +338,8 @@ public class PieceFile {
         String fileName = pieceNo + "." + LocalInfor.getCurrentTime("MMddHHmmssSSS") + ".nc"; //pieceNo.time.re  //格式
         File re_encodeFile = MyFileUtils.writeToFile(re_encodeFilePath, fileName, reEncodeData);
         isReencoding = false;
+        haveSendFile = true;
+        System.out.println(pieceNo + "再编码完成，已返回文件路径");
         return re_encodeFile.getPath();
     }
 
@@ -360,6 +399,27 @@ public class PieceFile {
         }
     }
 
+    //在socket突然断开时调用
+    //目的是检查本地文件是否和变量信息同步
+    public void handleDataSynError() {
+        ArrayList<File> encodeFiles = MyFileUtils.getListFiles(encodeFilePath);
+        //
+        if (encodeFiles.size() == currentFileNum) {
+            //说明数据是同步的没出错
+            return;
+        }
+        //先检查文件长度
+        for (File file : encodeFiles) {
+            int fileLen = (int) file.length();
+            if (fileLen != rightFileLen) {
+                //文件长度不合法，则删除该文件
+                file.delete();
+            }
+        }
+        //出现错误
+        //与系数矩阵做比对，找出出错的文件
+
+    }
 
     /**
      * 以下是自动生成的Getter和Setter方法
@@ -442,5 +502,13 @@ public class PieceFile {
 
     public void setHaveSendFile(boolean haveSendFile) {
         this.haveSendFile = haveSendFile;
+    }
+
+    public String getSendBufferPath() {
+        return sendBufferPath;
+    }
+
+    public void setSendBufferPath(String sendBufferPath) {
+        this.sendBufferPath = sendBufferPath;
     }
 }

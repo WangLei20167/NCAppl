@@ -273,7 +273,7 @@ public class MainActivity extends AppCompatActivity {
                 @Override
                 public void run() {
                     SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
-                            "正在对"+file.getName()+"进行再编码");
+                            "正在对"+file.getName()+"进行编码");
                     encodeFile = new EncodeFile(file.getName(), GenerationSize, null);
                     //编码
                     encodeFile.cutFile(file);

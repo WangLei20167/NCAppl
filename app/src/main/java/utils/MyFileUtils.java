@@ -361,12 +361,12 @@ public class MyFileUtils {
 
 
     /**
-     * 把文件复制进指定的路径
-     *
+     * //把文件复制进指定的路径
+     * 转移文件
      * @param file_source
      * @param targetPath
      */
-    public static void copyFile(File file_source, String targetPath) {
+    public static File transferFile(File file_source, String targetPath) {
         String fileName = file_source.getName();
 
         File file_target = new File(targetPath + File.separator + fileName);
@@ -398,7 +398,9 @@ public class MyFileUtils {
                 e.printStackTrace();
             }
         }
-
+        //删除源文件
+        file_source.delete();
+        return file_target;
     }
 
 

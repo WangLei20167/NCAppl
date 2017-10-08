@@ -208,7 +208,8 @@ public class EncodeFile {
                         "encodeFilePath",
                         "re_encodeFilePath",
                         "isReencoding",
-                        "haveSendFile"
+                        "haveSendFile",
+                        "sendBufferPath"
                 });
         //XStream xStream = new XStream(new DomDriver("UTF-8"));
         XStream xStream = new XStream(new Sun14ReflectionProvider(new FieldDictionary(sorter)));
@@ -254,6 +255,7 @@ public class EncodeFile {
         //恢复pieceFile的nK值
         for (PieceFile pieceFile : encodeFile.getPieceFileList()) {
             pieceFile.setnK(encodeFile.getnK());
+
         }
         //是否恢复所有文件路径
         if (recoverAllPath) {
@@ -271,6 +273,15 @@ public class EncodeFile {
                 pieceFile.setEncodeFilePath(encodeFilePath);
                 String re_encodeFilePath = pieceFilePath + File.separator + "re_encodeFile";
                 pieceFile.setRe_encodeFilePath(re_encodeFilePath);
+                String sendBufferPath=pieceFilePath+File.separator+"sendBuffer";
+                pieceFile.setSendBufferPath(sendBufferPath);
+                //查看是否有再编码文件
+                ArrayList<File> files = MyFileUtils.getListFiles(pieceFile.getRe_encodeFilePath());
+                if (files.size() == 1) {
+                    pieceFile.setHaveSendFile(true);
+                } else {
+                    pieceFile.setHaveSendFile(false);
+                }
             }
         }
         return encodeFile;
@@ -343,6 +354,8 @@ public class EncodeFile {
         }
         currentSmallPiece = count;
     }
+
+
 
     /**
      * 以下是自动生成的Getter和Setter方法
