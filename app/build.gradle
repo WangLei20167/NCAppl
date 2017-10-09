@@ -42,6 +42,8 @@ dependencies {
     compile 'com.nononsenseapps:filepicker:4.1.0'
     //弹窗支持库
     compile 'com.afollestad.material-dialogs:core:0.9.4.5'
+    //全局抓获异常
+    compile 'com.mauiie.aech:AECrashHandler:0.0.1'
 }
 
 

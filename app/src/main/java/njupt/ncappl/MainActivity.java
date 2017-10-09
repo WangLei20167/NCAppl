@@ -20,6 +20,8 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import com.afollestad.materialdialogs.MaterialDialog;
+import com.mauiie.aech.AECHConfiguration;
+import com.mauiie.aech.AECrashHelper;
 import com.nononsenseapps.filepicker.FilePickerActivity;
 import com.nononsenseapps.filepicker.Utils;
 
@@ -28,16 +30,14 @@ import java.util.ArrayList;
 import java.util.List;
 
 import appData.GlobalVar;
-import connect.APHelper;
+import wifi.APHelper;
 import connect.Constant;
 import connect.TcpClient;
 import connect.TcpServer;
-import connect.WifiAdmin;
+import wifi.WifiAdmin;
 import fileSlices.EncodeFile;
 import fileSlices.PieceFile;
 import msg.MsgValue;
-import nc.NCUtils;
-import utils.LocalInfor;
 import utils.MyFileUtils;
 
 public class MainActivity extends AppCompatActivity {
@@ -49,7 +49,9 @@ public class MainActivity extends AppCompatActivity {
     //对打开文件选择器时 显示的路径进行控制
     private String startPath;
     //编码数据
-    EncodeFile encodeFile;
+    //注意无论时server状态还是client状态
+    //操作的都是这一个变量
+    private EncodeFile encodeFile;
     private int GenerationSize;
 
     TextView tv_promptMsg;
@@ -61,6 +63,11 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
         //初始化全局变量   文件存放地址
         GlobalVar.initial(this);
+        //全局抓取异常   世界警察
+        AECrashHelper.initCrashHandler(getApplication(),
+                new AECHConfiguration.Builder()
+                        .setLocalFolderPath(GlobalVar.getCrashPath()) //配置日志信息存储的路径
+                        .setSaveToLocal(true).build()); //开启存储在本地功能
         //文件选择器开始目录   取
         SharedPreferences pref = getSharedPreferences("data", MODE_PRIVATE);
         startPath = pref.getString("startPath", Environment.getExternalStorageDirectory().getPath());
@@ -71,10 +78,6 @@ public class MainActivity extends AppCompatActivity {
         //TCPServer和TCPClient的管理类
         tcpSvr = new TcpServer(handler);
         tcpClient = new TcpClient(handler);
-        //初始化有限域
-//        NCUtils.nc_acquire();
-//        NCUtils.InitGalois();
-//        NCUtils.nc_release();
 
         tv_promptMsg = (TextView) findViewById(R.id.tv_promptMsg);
         scrollView = (ScrollView) findViewById(R.id.scrollView);
@@ -131,7 +134,6 @@ public class MainActivity extends AppCompatActivity {
                                  * If you use alwaysCallSingleChoiceCallback(), which is discussed below,
                                  * returning false here won't allow the newly selected radio button to actually be selected.
                                  **/
-                                //Toast.makeText(MainActivity.this, text, Toast.LENGTH_SHORT).show();
                                 String xmlFilePath = GlobalVar.getTempPath() + File.separator + text + File.separator + "xml.txt";
                                 encodeFile = EncodeFile.xml2object(xmlFilePath, true);
                                 return true;
@@ -187,7 +189,7 @@ public class MainActivity extends AppCompatActivity {
             public void run() {
                 //此处做打开wifi的操作
                 wifiAdmin.openWifi();
-                String ssid = wifiAdmin.searchWifi(Constant.SSID);
+                String ssid = wifiAdmin.searchWifi();
                 if (ssid == null) {
                     System.out.println("查找指定ssid失败");
                     return;
@@ -196,7 +198,7 @@ public class MainActivity extends AppCompatActivity {
                 wifiAdmin.addNetwork(
                         wifiAdmin.CreateWifiInfo(ssid, Constant.AP_PASS_WORD, 3)
                 );
-                //等待连接的时间为10s
+                //等待连接的时间为5s
                 // Starting time.
                 long startMili = System.currentTimeMillis();
                 while (!wifiAdmin.isWifiConnected()) {
@@ -212,10 +214,11 @@ public class MainActivity extends AppCompatActivity {
                     // Ending time.
                     long endMili = System.currentTimeMillis();
                     int time = (int) ((endMili - startMili) / 1000);
-                    if (time > 10) {
+                    if (time > 5) {
                         SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
                                 "连接指定wifi失败，请重试"
                         );
+                        openClient(); //重试
                         return;
                     }
                 }
@@ -223,7 +226,7 @@ public class MainActivity extends AppCompatActivity {
                         "连接wifi成功"
                 );
                 //做连接ServerSocket的动作
-                tcpClient.connectServer();
+                tcpClient.connectServer(encodeFile);
             }
         }).start();
     }
@@ -273,7 +276,7 @@ public class MainActivity extends AppCompatActivity {
                 @Override
                 public void run() {
                     SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
-                            "正在对"+file.getName()+"进行编码");
+                            "正在对" + file.getName() + "进行编码");
                     encodeFile = new EncodeFile(file.getName(), GenerationSize, null);
                     //编码
                     encodeFile.cutFile(file);
@@ -298,6 +301,11 @@ public class MainActivity extends AppCompatActivity {
                     tv_promptMsg.append(infor + "\n");
                     //滚动到最下面
                     scrollView.fullScroll(ScrollView.FOCUS_DOWN);
+                    break;
+                //切换向server
+                case MsgValue.CLIENT_2_SERVER:
+                    EncodeFile encodeFile0 = encodeFile;
+                    openServer();
                     break;
                 default:
                     break;

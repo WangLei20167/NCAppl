@@ -19,6 +19,7 @@ import appData.GlobalVar;
 import fileSlices.EncodeFile;
 import fileSlices.PieceFile;
 import msg.MsgValue;
+import utils.IntAndBytes;
 import utils.MyFileUtils;
 
 /**
@@ -35,12 +36,16 @@ public class TcpClient {
     //本地的编码文件
     private EncodeFile localEncodeFile;
     private EncodeFile itsEncodeFile;   //对方的编码数据
+    //用来控制第一次获取到一半的数据时
+    //切换AP
+    private volatile int requestFileNum = 0;
 
     public TcpClient(Handler handler) {
         this.handler = handler;
     }
 
-    public void connectServer() {
+    public void connectServer(EncodeFile encodeFile) {
+        localEncodeFile = encodeFile;
         try {
             //若是socket不为空
             if (socket != null) {
@@ -112,7 +117,17 @@ public class TcpClient {
                         //一次服务请求结束  再次请求服务
                         SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
                                 "对方的一次文件请求应答完成");
-                        serviceAcquire();
+                        if (requestFileNum > 0) {
+                            serviceAcquire();
+                        } else {
+                            //这里做关闭socket操作
+                            System.out.println("(client)关闭socket");
+                            socket.close();
+                            //返回到主线程   执行开启AP
+
+                            //跳出循环
+                            break;
+                        }
                         continue;
                     } else if (fileNameOrOrder.contains(",")) {
                         //这个是文件请求信息
@@ -196,15 +211,6 @@ public class TcpClient {
                                 String reEncodeFilePath = pieceFile.getReencodeFile();
                                 //发送给用户
                                 sendfile(reEncodeFilePath, true);
-                                //发送完后，再重新编码文件
-//                                new Thread(new Runnable() {
-//                                    @Override
-//                                    public void run() {
-//                                        if (!pieceFile.isReencoding()) {
-//                                            pieceFile.re_encodeFile();
-//                                        }
-//                                    }
-//                                }).start();
                                 break;
                             }
                         }
@@ -247,6 +253,16 @@ public class TcpClient {
                 (!localEncodeFile.getFileName().equals(fileName))) {
             localEncodeFile = EncodeFile.clone(itsEncodeFile);
         }
+        //获取一半数据
+        if (localEncodeFile.getCurrentSmallPiece() == 0) {
+            requestFileNum = localEncodeFile.getTotalSmallPiece() / 2;
+        } else {
+            //无限请求   请求到不能再请求
+            requestFileNum = Integer.MAX_VALUE;
+        }
+        //在此判断对方一共有多少个有用的文件
+
+
         //把xml文件发给server
         String xmlFilePath = localEncodeFile.getStoragePath() + File.separator + "xml.txt";
         sendfile(xmlFilePath, false);
@@ -263,11 +279,22 @@ public class TcpClient {
         }
         String usefulParts = localEncodeFile.findUsefulParts(itsEncodeFile);
         if (!usefulParts.equals("")) {
+            String requestCode = "";
+            //在此处对请求文件的数目加入控制
+            String[] split = usefulParts.split(",");
+            int num = split.length;
+            if (num > requestFileNum) {
+                for (int i = 0; i < requestFileNum; ++i) {
+                    requestCode += (split[i] + ",");
+                }
+            } else {
+                requestCode = usefulParts;
+            }
             SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
                     "对方拥有对我有用的数据，向对方发送文件请求");
             try {
                 dos_Semaphore.acquire();
-                dos.writeUTF(usefulParts);
+                dos.writeUTF(requestCode);
                 dos_Semaphore.release();
             } catch (IOException e) {
                 e.printStackTrace();
@@ -336,6 +363,8 @@ public class TcpClient {
         for (PieceFile pieceFile : localEncodeFile.getPieceFileList()) {
             if (pieceFile.getPieceNo() == partNo) {
                 if (pieceFile.addEncodeFile(file)) {
+                    //成功添加了一个文件
+                    --requestFileNum;
                     //更改已收到的编码数据片的个数
                     localEncodeFile.updateCurrentSmallPiece();
                     //写入xml配置文件

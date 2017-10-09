@@ -3,6 +3,8 @@ package appData;
 import android.content.Context;
 import android.os.Environment;
 
+import java.io.File;
+
 import connect.Constant;
 import utils.LocalInfor;
 import utils.MyFileUtils;
@@ -16,8 +18,10 @@ import utils.MyFileUtils;
 
 public class GlobalVar {
     private static String dataFolderPath;
+    //二级文件夹
     private static String FileRevPath;
     private static String TempPath;
+    private static String CrashPath;
 
     private static String SSID_IMEI;
 
@@ -26,7 +30,14 @@ public class GlobalVar {
         dataFolderPath = MyFileUtils.creatFolder(Environment.getExternalStorageDirectory().getPath(), "1NCSharing");
         TempPath = MyFileUtils.creatFolder(dataFolderPath, "Temp");  //创建文件暂存的目录
         FileRevPath = MyFileUtils.creatFolder(dataFolderPath, "FileRev");
-        SSID_IMEI = Constant.SSID + LocalInfor.getDeviceID(context);
+        CrashPath = MyFileUtils.creatFolder(dataFolderPath, "Crash");
+        //如果异常日志大于20M，则删除
+        File folder = new File(CrashPath);
+        int folderLen = (int) folder.length();
+        if (folderLen > 20 * 1024 * 1024) {
+            MyFileUtils.deleteAllFile(CrashPath, false);
+        }
+        SSID_IMEI = Constant.SUB_SSID + LocalInfor.getDeviceID(context);
     }
 
     //以下是Getter和Setter方法
@@ -40,6 +51,10 @@ public class GlobalVar {
 
     public static String getTempPath() {
         return TempPath;
+    }
+
+    public static String getCrashPath() {
+        return CrashPath;
     }
 
     public static String getSsidImei() {

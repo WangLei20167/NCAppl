@@ -6,5 +6,8 @@ package msg;
  */
 
 public class MsgValue {
-    public final static int TELL_ME_SOME_INFOR=0;
+    public final static int TELL_ME_SOME_INFOR = 0;
+    //client转server
+    public final static int CLIENT_2_SERVER = 1;
+
 }

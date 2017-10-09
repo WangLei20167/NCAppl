@@ -1,4 +1,4 @@
-package connect;
+package wifi;
 
 import android.content.Context;
 import android.net.ConnectivityManager;
@@ -8,7 +8,10 @@ import android.net.wifi.WifiConfiguration;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
 
+import java.util.ArrayList;
 import java.util.List;
+
+import connect.Constant;
 
 /**
  * 此类用以管理wifi
@@ -165,13 +168,16 @@ public class WifiAdmin {
     }
 
     //检查指定的SSID信息是否已经存在
+    //改为是否包含指定的ssid子串
     private WifiConfiguration IsExsits(String SSID) {
         try {
             List<WifiConfiguration> existingConfigs = mWifiManager.getConfiguredNetworks();
             for (WifiConfiguration existingConfig : existingConfigs) {
+                //多带一个引号  ""hanhai""
                 if (existingConfig.SSID.equals("\"" + SSID + "\"")) {
                     return existingConfig;
                 }
+                //
             }
         } catch (Exception e) {
             e.printStackTrace();
@@ -180,18 +186,42 @@ public class WifiAdmin {
         }
     }
 
+    //删除之前以后保存过的网络信息
+    private void deleteContainSSid() {
+        try {
+            List<WifiConfiguration> existingConfigs = mWifiManager.getConfiguredNetworks();
+            for (WifiConfiguration existingConfig : existingConfigs) {
+                String ssid = existingConfig.SSID;
+                if (existingConfig.SSID.contains(Constant.SUB_SSID)) {
+                    mWifiManager.removeNetwork(existingConfig.networkId);
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
 
     //搜索是否存在指定ssid包含的网络，存在返回对应的ssid
-    public String searchWifi(String ssid) {
+    public String searchWifi() {
+        //删除之前已经保存过得网络信息
+        //避免其自动连接之前的ssid
+        //让其能够根据策略连接指定的ssid
+        deleteContainSSid();
         //String bssid = "";   //相同ssid按bssid来识别
         //在以保存的wifi信息中找ssid，若存在，则先删除
+        //WifiConfiguration tempConfig = this.IsExsits(ssid);
 //        WifiConfiguration tempConfig = this.IsExsits(ssid);
 //        if (tempConfig != null) {
 //            mWifiManager.removeNetwork(tempConfig.networkId);
 //        }
+        //从已保存网络中删除包含SSID中包含有ssid子串的网络
+
         //标志是否找到指定的ssid
         boolean find = false;
         ScanResult scanResult0 = null;
+        //取出有用的wifi列表
+        List<ScanResult> usefulWifiList = new ArrayList<>();
         do {
             //扫描网络列表
             mWifiManager.startScan();
@@ -202,10 +232,10 @@ public class WifiAdmin {
 //                if (mWifiList.get(i).SSID.equals(ssid)) {
 //                    int level = mWifiList.get(i).level;
 //                    //level的值为-100到0的值，值越小，信号越差
-//                    //0到-50，最佳
-//                    //-50到-70,较好
-//                    //-70到-80,一般
-//                    //-80到-100，最差
+//                    //0到-50，最佳 4
+//                    //-50到-70,较好 3
+//                    //-70到-80,一般 2
+//                    //-80到-100，最差 1
 //                    if (level > -80) {
 //                        //信号大于-80，质量一般
 //                        bssid = mWifiList.get(i).BSSID;
@@ -215,9 +245,18 @@ public class WifiAdmin {
 //                }
                 ScanResult scanResult = mWifiList.get(i);
                 //找到包含 NCSharing的SSID进行连接
-                if (scanResult.SSID.indexOf(Constant.SSID) == 0) {
+                if (scanResult.SSID.indexOf(Constant.SUB_SSID) == 0) {
+                    usefulWifiList.add(scanResult);
                     //连接最好信号的网络
                     int level = mWifiList.get(i).level;
+//                    int num = mWifiManager.calculateSignalLevel(scanResult.level, 5);
+//                    int num0=mWifiManager.calculateSignalLevel(-1, 5);
+//                    int num1=mWifiManager.calculateSignalLevel(-50, 5);
+//                    int num3=mWifiManager.calculateSignalLevel(-70, 5);
+//                    int num4=mWifiManager.calculateSignalLevel(-100, 5);
+//                    int num5=mWifiManager.calculateSignalLevel(-60, 5);
+//                    int num6=mWifiManager.calculateSignalLevel(0, 5);
+//                    int num7=mWifiManager.calculateSignalLevel(-80, 5);
                     if (scanResult0 == null) {
                         scanResult0 = scanResult;
                     } else if (level > scanResult0.level) {
@@ -236,12 +275,10 @@ public class WifiAdmin {
                 }
             }
         } while (mWifiManager.isWifiEnabled());
+        //在此usefulWifiList列表进行wifi选择
+        //选择后，返回一个ScanResult类型的值
         if (scanResult0 != null) {
             String resultSSID = scanResult0.SSID;
-            WifiConfiguration tempConfig = this.IsExsits(resultSSID);
-            if (tempConfig != null) {
-                mWifiManager.removeNetwork(tempConfig.networkId);
-            }
             return resultSSID;
         } else {
             return null;

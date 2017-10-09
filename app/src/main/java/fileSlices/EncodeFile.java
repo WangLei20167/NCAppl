@@ -273,7 +273,7 @@ public class EncodeFile {
                 pieceFile.setEncodeFilePath(encodeFilePath);
                 String re_encodeFilePath = pieceFilePath + File.separator + "re_encodeFile";
                 pieceFile.setRe_encodeFilePath(re_encodeFilePath);
-                String sendBufferPath=pieceFilePath+File.separator+"sendBuffer";
+                String sendBufferPath = pieceFilePath + File.separator + "sendBuffer";
                 pieceFile.setSendBufferPath(sendBufferPath);
                 //查看是否有再编码文件
                 ArrayList<File> files = MyFileUtils.getListFiles(pieceFile.getRe_encodeFilePath());
@@ -311,6 +311,7 @@ public class EncodeFile {
         return newEncodeFile;
     }
 
+    //找出有用的部分 进行请求
     public String findUsefulParts(EncodeFile itsEncodeFile) {
         //如果本地没有任何数据
         if (pieceFileList.size() == 0) {
@@ -347,6 +348,36 @@ public class EncodeFile {
         return usefulParts;
     }
 
+    //统计一共有多少有用的文件
+    public int calculateUsefulFileNum(EncodeFile itsEncodeFile) {
+        //如果本地没有任何数据
+        if (currentSmallPiece == 0) {
+            return itsEncodeFile.currentSmallPiece;
+        }
+        //
+        int count = 0;
+        List<PieceFile> itsPieceFileList = itsEncodeFile.getPieceFileList();
+        for (PieceFile itsPieceFile : itsPieceFileList) {
+            int itsPieceNo = itsPieceFile.getPieceNo();
+            boolean haveThisPart = false;
+            for (PieceFile myPieceFile : pieceFileList) {
+                if (myPieceFile.getPieceNo() == itsPieceNo) {
+                    //判断对方的数据是否对自己有用
+                    int temp = myPieceFile.getUserfulFileNum(itsPieceFile.getCoeffMatrix());
+                    count += temp;
+                    haveThisPart = true;
+                    break;
+                }
+            }
+            //没有这部分数据
+            if (!haveThisPart) {
+                int temp = itsPieceFile.getCurrentFileNum();
+                count += temp;
+            }
+        }
+        return count;
+    }
+
     public void updateCurrentSmallPiece() {
         int count = 0;
         for (PieceFile pieceFile : pieceFileList) {
@@ -354,7 +385,6 @@ public class EncodeFile {
         }
         currentSmallPiece = count;
     }
-
 
 
     /**

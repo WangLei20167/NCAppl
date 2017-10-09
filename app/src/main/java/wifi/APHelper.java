@@ -1,4 +1,4 @@
-package connect;
+package wifi;
 
 import android.content.Context;
 import android.net.wifi.WifiConfiguration;
@@ -10,6 +10,7 @@ import java.lang.reflect.Method;
 
 
 import appData.GlobalVar;
+import connect.Constant;
 
 import static android.content.Context.WIFI_SERVICE;
 

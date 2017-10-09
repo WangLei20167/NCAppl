@@ -6,7 +6,7 @@ package connect;
 
 public class Constant {
     //ssid的格式是 NCSharing+手机唯一识别码
-    public final static String SSID = "NCSharing";
+    public final static String SUB_SSID = "NCSharing";
     //定义AP密码
     public final static String AP_PASS_WORD = "123456789";
     //作为Server时的监听地址与端口

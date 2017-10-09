@@ -69,7 +69,7 @@ public class PieceFile {
         encodeFilePath = MyFileUtils.creatFolder(pieceFilePath, "encodeFiles");
         re_encodeFilePath = MyFileUtils.creatFolder(pieceFilePath, "re_encodeFile");
 
-        sendBufferPath=MyFileUtils.creatFolder(pieceFilePath,"sendBuffer");
+        sendBufferPath = MyFileUtils.creatFolder(pieceFilePath, "sendBuffer");
     }
 
     /**
@@ -103,6 +103,23 @@ public class PieceFile {
             }
         }
         return false;
+    }
+
+    //查看对方有多少个文件对自己有用
+    public int getUserfulFileNum(int[][] itsCoeffMatrix) {
+        int myRow = coeffMatrix.length;
+        int itsRow = itsCoeffMatrix.length;
+        //拼接数组
+        int totalRow = myRow + itsRow;
+        int[][] testMatrix = new int[totalRow][nK];
+        System.arraycopy(coeffMatrix, 0, testMatrix, 0, myRow);
+        System.arraycopy(itsCoeffMatrix, 0, testMatrix, myRow, itsRow);
+        byte[] byteArray = IntAndBytes.int2Array_byte1Array(testMatrix);
+        NCUtils.nc_acquire();
+        int rank = NCUtils.getRank(byteArray, totalRow, nK);
+        NCUtils.nc_release();
+        int usefulFileNum = rank - myRow;
+        return usefulFileNum;
     }
 
     //接收到编码文件   加入操作
@@ -226,32 +243,20 @@ public class PieceFile {
 //        return files.get(0).getPath();
     }
 
-    //检查文件长度是否合法 编码系数是否有重复
-    //若要获取encodefile需用此方法获取文件列表
-    public ArrayList<File> checkFileLen() {
+    //这里不应该执行删除文件
+    //会导致再编码时，删除正在写的文件
+    //这里只把文件长度合适的文件列表，返回给调用处
+    public ArrayList<File> getRightLenFileList() {
         ArrayList<File> fileList = MyFileUtils.getList_1_files(encodeFilePath);
-        int fileNum = fileList.size();
+        //int fileNum = fileList.size();
+        ArrayList<File> rightLenFileList = new ArrayList<>();
         for (File file : fileList) {
             int fileLen = (int) file.length();
-            if (fileLen != rightFileLen) {
-                file.delete();
-                System.out.println("找到有文件不符合长度要求，删除");
+            if (fileLen == rightFileLen) {
+                rightLenFileList.add(file);
             }
         }
-        //此处应该加大文件合法性的校验
-        //1、首字节是否为nK
-        //2、编码系数是否在系数矩阵中
-        //检查下系数有多少行系数
-        ArrayList<File> fileList1 = MyFileUtils.getList_1_files(encodeFilePath);
-//        int fileNum1 = fileList1.size();
-//        if (currentFileNum != fileNum1) {
-//            currentFileNum = fileNum1;
-//        }
-        //说明文件数目和系数矩阵的行数是否一致
-//        if(coeffMatrix.length!=fileNum){
-//            //不一致   就说明出现了系数矩阵和文件出现了严重的数据同步错误
-//        }
-        return fileList1;
+        return rightLenFileList;
     }
 
     //对文件进行编码，这里其实只是用单位矩阵进行封装
@@ -302,7 +307,7 @@ public class PieceFile {
         System.out.println(pieceNo + "正在进行再编码");
         isReencoding = true;
         //从编码文件路径中取出文件
-        List<File> fileList = checkFileLen();
+        List<File> fileList = getRightLenFileList();
         if (fileList == null) {
             //检查长度时出错
             //   return null;
@@ -345,7 +350,7 @@ public class PieceFile {
 
     //对文件进行解码     需要访问jni
     public boolean decode_pfile() {
-        List<File> fileList = checkFileLen();
+        List<File> fileList = getRightLenFileList();
         if (fileList == null) {
             //检查长度时出错
             return false;
