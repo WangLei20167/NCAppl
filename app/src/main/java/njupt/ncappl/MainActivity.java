@@ -51,7 +51,7 @@ public class MainActivity extends AppCompatActivity {
     //编码数据
     //注意无论时server状态还是client状态
     //操作的都是这一个变量
-    private EncodeFile encodeFile;
+    private volatile EncodeFile encodeFile;
     private int GenerationSize;
 
     TextView tv_promptMsg;
@@ -149,7 +149,6 @@ public class MainActivity extends AppCompatActivity {
     public void onTest(View view) {
         if (encodeFile != null) {
             for (final PieceFile pieceFile : encodeFile.getPieceFileList()) {
-
                 new Thread(new Runnable() {
                     @Override
                     public void run() {
@@ -167,6 +166,8 @@ public class MainActivity extends AppCompatActivity {
         new Thread(new Runnable() {
             @Override
             public void run() {
+                //关闭处理client的操作
+                tcpClient.closeSocket();
                 if (encodeFile == null) {
                     SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0, "encodeFile变量为null");
                     return;
@@ -187,6 +188,9 @@ public class MainActivity extends AppCompatActivity {
         new Thread(new Runnable() {
             @Override
             public void run() {
+                //关闭server的操作
+                tcpSvr.closeServer();
+                SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0, "正在搜索连接指定wifi");
                 //此处做打开wifi的操作
                 wifiAdmin.openWifi();
                 String ssid = wifiAdmin.searchWifi();
@@ -216,8 +220,9 @@ public class MainActivity extends AppCompatActivity {
                     int time = (int) ((endMili - startMili) / 1000);
                     if (time > 5) {
                         SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
-                                "连接指定wifi失败，请重试"
+                                "连接指定wifi失败，正在重试"
                         );
+                        System.out.println("连接指定wifi失败，正在重试");
                         openClient(); //重试
                         return;
                     }
@@ -226,7 +231,9 @@ public class MainActivity extends AppCompatActivity {
                         "连接wifi成功"
                 );
                 //做连接ServerSocket的动作
-                tcpClient.connectServer(encodeFile);
+                if (!tcpClient.connectServer()) {
+                    openClient();  //重试
+                }
             }
         }).start();
     }
@@ -302,10 +309,27 @@ public class MainActivity extends AppCompatActivity {
                     //滚动到最下面
                     scrollView.fullScroll(ScrollView.FOCUS_DOWN);
                     break;
-                //切换向server
+                //把client中的localEncodeFile变量传值给主线程
+                case MsgValue.CLIENT_CHANGE_ENCODEFILR:
+                    encodeFile = (EncodeFile) msg.obj;
+                    System.out.println("client把localEncodeFile的值传给主线程encodeFile");
+                    break;
+                //client切换向server
                 case MsgValue.CLIENT_2_SERVER:
-                    EncodeFile encodeFile0 = encodeFile;
+                    //测试encodeFile变量
+                    System.out.println("client向server切换");
+                    //EncodeFile encodeFile0 = encodeFile;
                     openServer();
+                    break;
+                //server切换向client
+                case MsgValue.SERVER_2_CLIENT:
+                    System.out.println("server向client切换");
+                    //EncodeFile encodeFile0 = encodeFile;
+                    openClient();
+                    break;
+                case MsgValue.DECODE_SUCCESS_OPEN_FILE:
+                    System.out.println("正在打开文件");
+                    MyFileUtils.openFile(msg.obj, MainActivity.this);
                     break;
                 default:
                     break;
@@ -333,10 +357,6 @@ public class MainActivity extends AppCompatActivity {
 
         } else {
             //退出前的处理操作
-            //释放有限域
-//            NCUtils.nc_acquire();
-//            NCUtils.UninitGalois();
-//            NCUtils.nc_release();
             //执行退出操作,并释放资源
             finish();
             //Dalvik VM的本地方法完全退出app

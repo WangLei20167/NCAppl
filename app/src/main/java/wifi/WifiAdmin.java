@@ -63,6 +63,14 @@ public class WifiAdmin {
         if (apHelper.isApEnabled()) {
             apHelper.setWifiApEnabled(null, false);
         }
+        //等待ap关闭
+        while(apHelper.isApEnabled()){
+            try {
+                Thread.sleep(100);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
         if (!mWifiManager.isWifiEnabled()) {
             mWifiManager.setWifiEnabled(true);
         }

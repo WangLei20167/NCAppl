@@ -209,15 +209,11 @@ Java_nc_NCUtils_getRank(JNIEnv *env, jobject instance, jbyteArray matrix, jint n
     jbyte *olddata = (jbyte *) env->GetByteArrayElements(matrix, 0);
     jsize oldsize = env->GetArrayLength(matrix);
     unsigned char *pData = (unsigned char *) olddata;
-
+    //初始化有限域
     gf_init(8, 0x00000187);
 
-    //转存下数据
-//    jboolean **M = new jboolean *[nRow];
-//    for (int j = 0; j < nRow; j++) {
-//        M[j] = new jboolean[nCol];
-//    }
-    //  unsigned int M[nRow][nCol];
+    //
+    //  unsigned int M[nRow][nCol];  这种写法会造成多线程时出错
     unsigned int **M = new unsigned int *[nRow];
     for (int i = 0; i < nRow; ++i) {
         M[i] = new unsigned int[nCol];
@@ -230,7 +226,6 @@ Java_nc_NCUtils_getRank(JNIEnv *env, jobject instance, jbyteArray matrix, jint n
             M[i][j] = pData[i * nCol + j];
         }
     }
-
 
     // Define a variable to record the position of the main element.
     int yPos = 0;

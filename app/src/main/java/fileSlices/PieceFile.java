@@ -209,10 +209,10 @@ public class PieceFile {
                 e.printStackTrace();
             }
         }
-        ArrayList<File> fileArrayList = MyFileUtils.getListFiles(re_encodeFilePath);
+        ArrayList<File> fileArrayList = MyFileUtils.getList_1_files(re_encodeFilePath);
         File file = fileArrayList.get(0);
         System.out.println("已获取到再编码文件,正在剪切");
-        File transferFile = MyFileUtils.transferFile(file, sendBufferPath);
+        File transferFile = MyFileUtils.moveFile(file, sendBufferPath);
         haveSendFile = false;
         return transferFile.getPath();
 //        ArrayList<File> files = MyFileUtils.getListFiles(re_encodeFilePath);
@@ -407,7 +407,7 @@ public class PieceFile {
     //在socket突然断开时调用
     //目的是检查本地文件是否和变量信息同步
     public void handleDataSynError() {
-        ArrayList<File> encodeFiles = MyFileUtils.getListFiles(encodeFilePath);
+        ArrayList<File> encodeFiles = MyFileUtils.getList_1_files(encodeFilePath);
         //
         if (encodeFiles.size() == currentFileNum) {
             //说明数据是同步的没出错

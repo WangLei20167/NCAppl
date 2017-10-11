@@ -39,13 +39,14 @@ public class TcpClient {
     //用来控制第一次获取到一半的数据时
     //切换AP
     private volatile int requestFileNum = 0;
+    //再编码线程是否循环执行的标志
+    private volatile boolean reencodeFlag = false;
 
     public TcpClient(Handler handler) {
         this.handler = handler;
     }
 
-    public void connectServer(EncodeFile encodeFile) {
-        localEncodeFile = encodeFile;
+    public boolean connectServer() {
         try {
             //若是socket不为空
             if (socket != null) {
@@ -71,7 +72,7 @@ public class TcpClient {
                     if ((endTime - startTime) > 3000) {
                         System.out.println("连接socket失败");
                         SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0, "连接ServerSocket失败");
-                        return;
+                        return false;
                     } else {
                         //等待0.1秒重连
                         try {
@@ -98,7 +99,11 @@ public class TcpClient {
             e.printStackTrace();
         }
         //连接成功   循环检测生成再编码文件
-        reencodeListenerThread();
+        if (!reencodeFlag) {
+            reencodeFlag = true;
+            reencodeListenerThread();
+        }
+        return true;
     }
 
     class RevThread extends Thread {
@@ -121,10 +126,12 @@ public class TcpClient {
                             serviceAcquire();
                         } else {
                             //这里做关闭socket操作
-                            System.out.println("(client)关闭socket");
-                            socket.close();
+                            System.out.println("已收到一半的数据，按照策略，开始切换为AP模式");
+                            //关闭socket
+                            //closeSocket();  在打开server状态时，写有关闭client的操作
                             //返回到主线程   执行开启AP
-
+                            SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0, "client切换为server");
+                            SendMessage(MsgValue.CLIENT_2_SERVER, 0, 0, null);
                             //跳出循环
                             break;
                         }
@@ -168,6 +175,7 @@ public class TcpClient {
                     fos.close();
                     if (fileNameOrOrder.equals("xml.txt")) {
                         //解析xml文件
+                        System.out.println("已获取到对方的xml配置文件，正在解析");
                         SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
                                 "已获取到对方的xml配置文件，正在解析");
                         parseXML(file);
@@ -175,6 +183,7 @@ public class TcpClient {
                         //处理收到文件后的EncodeFile变量更新
                         SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0, fileNameOrOrder +
                                 "接收完成");
+                        System.out.println(fileNameOrOrder + "接收完成");
                         solveFileChange(file);
                     }
 
@@ -193,6 +202,20 @@ public class TcpClient {
                 }
             }
         }
+    }
+
+    //关闭socket
+    public void closeSocket() {
+        if (socket != null) {
+            try {
+                socket.close();
+                System.out.println("(client)关闭socket");
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+        //关闭再编码线程
+        reencodeFlag = false;
     }
 
     //处理文件请求信息   请求信息包含,逗号 , DataOutputStream dos
@@ -252,6 +275,8 @@ public class TcpClient {
         if (localEncodeFile == null ||
                 (!localEncodeFile.getFileName().equals(fileName))) {
             localEncodeFile = EncodeFile.clone(itsEncodeFile);
+            //把值再传回主线程赋给encodeFile变量
+            SendMessage(MsgValue.CLIENT_CHANGE_ENCODEFILR, 0, 0, localEncodeFile);
         }
         //获取一半数据
         if (localEncodeFile.getCurrentSmallPiece() == 0) {
@@ -277,18 +302,19 @@ public class TcpClient {
         if (itsEncodeFile == null) {
             return;
         }
-        String usefulParts = localEncodeFile.findUsefulParts(itsEncodeFile);
-        if (!usefulParts.equals("")) {
+        int[] usefulParts = localEncodeFile.findUsefulParts(itsEncodeFile);
+        if (usefulParts != null) {
             String requestCode = "";
             //在此处对请求文件的数目加入控制
-            String[] split = usefulParts.split(",");
-            int num = split.length;
-            if (num > requestFileNum) {
+            int requestNum = usefulParts.length;
+            if (requestNum > requestFileNum) {
                 for (int i = 0; i < requestFileNum; ++i) {
-                    requestCode += (split[i] + ",");
+                    requestCode += (usefulParts[i] + ",");
                 }
             } else {
-                requestCode = usefulParts;
+                for (int i = 0; i < requestNum; ++i) {
+                    requestCode += (usefulParts[i] + ",");
+                }
             }
             SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
                     "对方拥有对我有用的数据，向对方发送文件请求");
@@ -306,11 +332,19 @@ public class TcpClient {
                 @Override
                 public void run() {
                     if (localEncodeFile.getCurrentSmallPiece() == localEncodeFile.getTotalSmallPiece()) {
+                        String filePath = localEncodeFile.getStoragePath() + File.separator + localEncodeFile.getFileName();
+                        File file = new File(filePath);
+                        if (file.exists()) {
+                            //解码文件已经存在
+                            return;
+                        }
                         SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
                                 "本地已拥有所有的编码数据片，正在解码");
                         if (localEncodeFile.recoveryFile()) {
                             SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
                                     localEncodeFile.getFileName() + "解码成功");
+                            //打开
+                            //SendMessage(MsgValue.DECODE_SUCCESS_OPEN_FILE, 0, 0, filePath);
                         } else {
                             SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
                                     "解码失败");
@@ -325,7 +359,13 @@ public class TcpClient {
     public String getEncodeFileStrogePath(String encodeFileName) {
         String filePath = "";
         String strPartNo = encodeFileName.substring(0, encodeFileName.indexOf("."));
-        int partNo = Integer.parseInt(strPartNo);
+        int partNo = 0;
+        try {
+            partNo = Integer.parseInt(strPartNo);
+        } catch (NumberFormatException e) {
+            e.printStackTrace();
+            System.out.println("解析传过来的文件名出错");
+        }
         //构建文件存储路径
         for (PieceFile pieceFile : localEncodeFile.getPieceFileList()) {
             if (pieceFile.getPieceNo() == partNo) {
@@ -419,7 +459,7 @@ public class TcpClient {
                         MyFileUtils.deleteAllFile(pieceFile.getSendBufferPath(), false);
                     }
                 }
-                while (true) {
+                while (reencodeFlag) {
                     if (localEncodeFile == null) {
 
                     } else {

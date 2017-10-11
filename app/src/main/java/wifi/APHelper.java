@@ -56,6 +56,14 @@ public class APHelper {
             //wifi和热点不能同时打开，所以打开热点的时候需要关闭wifi
             mWifiManager.setWifiEnabled(false);
         }
+        //等待wifi关闭
+        while (mWifiManager.isWifiEnabled()){
+            try {
+                Thread.sleep(100);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
 
         try {
             //使用反射机制打开热点

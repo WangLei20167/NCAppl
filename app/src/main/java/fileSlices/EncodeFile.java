@@ -14,7 +14,9 @@ import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.reflect.Array;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 import appData.GlobalVar;
@@ -276,7 +278,7 @@ public class EncodeFile {
                 String sendBufferPath = pieceFilePath + File.separator + "sendBuffer";
                 pieceFile.setSendBufferPath(sendBufferPath);
                 //查看是否有再编码文件
-                ArrayList<File> files = MyFileUtils.getListFiles(pieceFile.getRe_encodeFilePath());
+                ArrayList<File> files = MyFileUtils.getList_1_files(pieceFile.getRe_encodeFilePath());
                 if (files.size() == 1) {
                     pieceFile.setHaveSendFile(true);
                 } else {
@@ -312,25 +314,46 @@ public class EncodeFile {
     }
 
     //找出有用的部分 进行请求
-    public String findUsefulParts(EncodeFile itsEncodeFile) {
+    //让它返回数组
+    //pieceNo-1 位置，需要则true，不需要则false
+    public int[] findUsefulParts(EncodeFile itsEncodeFile) {
+        int[] usefulParts = null;
         //如果本地没有任何数据
         if (pieceFileList.size() == 0) {
-            String strAll = "";
+            //String strAll = "";
+//            for (int i = 0; i < TotalParts; ++i) {
+//                //strAll += ((i + 1) + ",");
+//                usefulParts[i] = i + 1;
+//            }
+            //return strAll;
+            usefulParts = new int[TotalParts];
             for (int i = 0; i < TotalParts; ++i) {
-                strAll += ((i + 1) + ",");
+                usefulParts[i] = (i + 1);
             }
-            return strAll;
+            return usefulParts;
         }
-        String usefulParts = "";
+        //String usefulParts = "";
+        //int iFlag = 0;
         List<PieceFile> itsPieceFileList = itsEncodeFile.getPieceFileList();
         for (PieceFile itsPieceFile : itsPieceFileList) {
             int itsPieceNo = itsPieceFile.getPieceNo();
             boolean haveThisPart = false;
+            int flag = itsPieceNo - 1; //下标
             for (PieceFile myPieceFile : pieceFileList) {
                 if (myPieceFile.getPieceNo() == itsPieceNo) {
                     //判断对方的数据是否对自己有用
+                    //usefulParts[flag] = myPieceFile.usefulOrNot(itsPieceFile.getCoeffMatrix());
                     if (myPieceFile.usefulOrNot(itsPieceFile.getCoeffMatrix())) {
-                        usefulParts += (itsPieceNo + ",");
+                        if (usefulParts == null) {
+                            usefulParts = new int[1];
+                            usefulParts[0] = itsPieceNo;
+                        } else {
+                            int len = usefulParts.length;
+                            int[] newArray = new int[len + 1];
+                            System.arraycopy(usefulParts, 0, newArray, 0, len);
+                            newArray[len] = itsPieceNo;
+                            usefulParts = newArray;
+                        }
                     }
                     haveThisPart = true;
                     break;
@@ -338,13 +361,24 @@ public class EncodeFile {
             }
             //没有这部分数据
             if (!haveThisPart) {
-                usefulParts += (itsPieceNo + ",");
+                if (usefulParts == null) {
+                    usefulParts = new int[1];
+                    usefulParts[0] = itsPieceNo;
+                } else {
+                    int len = usefulParts.length;
+                    int[] newArray = new int[len + 1];
+                    System.arraycopy(usefulParts, 0, newArray, 0, len);
+                    newArray[len] = itsPieceNo;
+                    usefulParts = newArray;
+                }
+                //usefulParts += (itsPieceNo + ",");
             }
         }
         //证明对方没有对自己有用的数据
 //        if (usefulParts.equals("")) {
 //            usefulParts = "-1，";
 //        }
+
         return usefulParts;
     }
 
