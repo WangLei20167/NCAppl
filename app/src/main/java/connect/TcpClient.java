@@ -34,7 +34,7 @@ public class TcpClient {
     //private OutputStream outputstream = null;
     private Handler handler;
     //本地的编码文件
-    private EncodeFile localEncodeFile;
+    private volatile EncodeFile localEncodeFile;
     private EncodeFile itsEncodeFile;   //对方的编码数据
     //用来控制第一次获取到一半的数据时
     //切换AP

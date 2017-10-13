@@ -617,8 +617,7 @@ public class TcpServer {
         if (taskState) {
             return;
         }
-        Random random = new Random(System.currentTimeMillis());
-        int diff = random.nextInt(30);
+
         //初始化mTimer和mTimerTask
         TimerTask mTimerTask = new TimerTask() {
             @Override
@@ -636,6 +635,8 @@ public class TcpServer {
         //long delay = 0;
         // schedules the task to be run in an interval
         //定时任务的启动代码
+        Random random = new Random(System.currentTimeMillis());
+        int diff = random.nextInt(30);
         long delay = baseDelay + diff * 1000;
         mTimer.schedule(mTimerTask, delay);
         taskState = true;

@@ -6,6 +6,7 @@ import android.os.Environment;
 import java.io.File;
 
 import connect.Constant;
+import fileSlices.EncodeFile;
 import utils.LocalInfor;
 import utils.MyFileUtils;
 
@@ -24,6 +25,9 @@ public class GlobalVar {
     private static String CrashPath;
 
     private static String SSID_IMEI;
+
+    //全局encodeFile变量
+    //public volatile EncodeFile g_encodeFile = null;
 
     //初始化变量
     public static void initial(Context context) {

@@ -28,6 +28,9 @@ import com.nononsenseapps.filepicker.Utils;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
+import java.util.Timer;
+import java.util.TimerTask;
 
 import appData.GlobalVar;
 import wifi.APHelper;
@@ -46,6 +49,10 @@ public class MainActivity extends AppCompatActivity {
     private WifiAdmin wifiAdmin;
     TcpServer tcpSvr;
     TcpClient tcpClient;
+    //一个定时器   client长时间无法连接上socket时调用
+    Timer timer;
+    volatile boolean needLeave;
+
     //对打开文件选择器时 显示的路径进行控制
     private String startPath;
     //编码数据
@@ -78,6 +85,7 @@ public class MainActivity extends AppCompatActivity {
         //TCPServer和TCPClient的管理类
         tcpSvr = new TcpServer(handler);
         tcpClient = new TcpClient(handler);
+        timer = new Timer();
 
         tv_promptMsg = (TextView) findViewById(R.id.tv_promptMsg);
         scrollView = (ScrollView) findViewById(R.id.scrollView);
@@ -166,6 +174,7 @@ public class MainActivity extends AppCompatActivity {
         new Thread(new Runnable() {
             @Override
             public void run() {
+                timer.cancel();
                 //关闭处理client的操作
                 tcpClient.closeSocket();
                 if (encodeFile == null) {
@@ -188,55 +197,95 @@ public class MainActivity extends AppCompatActivity {
         new Thread(new Runnable() {
             @Override
             public void run() {
+                timer.cancel();
                 //关闭server的操作
                 tcpSvr.closeServer();
+                //在此开启一个定时任务
+                needLeave = false;
+                //如果一段时间没有连接上wifi,则尝试切换为server状态
+                TimerTask mTimerTask = new TimerTask() {
+                    @Override
+                    public void run() {
+                        // task to run goes here
+                        //切换向AP节点
+                        //SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0, "定时任务运行");
+                        if (encodeFile != null) {
+                            needLeave = true;
+                            SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0, "client切换向server");
+                            SendMessage(MsgValue.CLIENT_2_SERVER, 0, 0, null);
+                        }
+                    }
+                };
+                Random random = new Random(System.currentTimeMillis());
+                int diff = random.nextInt(10);
+                long delay = (15 + diff) * 1000;
+                //如果delay秒后还是无法连接wifi，则尝试切换向AP
+                timer = new Timer();
+                timer.schedule(mTimerTask, delay);
+
                 SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0, "正在搜索连接指定wifi");
-                //此处做打开wifi的操作
-                wifiAdmin.openWifi();
-                String ssid = wifiAdmin.searchWifi();
-                if (ssid == null) {
-                    System.out.println("查找指定ssid失败");
-                    return;
-                }
-                //连接网络的操作
-                wifiAdmin.addNetwork(
-                        wifiAdmin.CreateWifiInfo(ssid, Constant.AP_PASS_WORD, 3)
-                );
-                //等待连接的时间为5s
-                // Starting time.
-                long startMili = System.currentTimeMillis();
-                while (!wifiAdmin.isWifiConnected()) {
-                    if (wifiAdmin.currentConnectSSID().equals(ssid)) {
+                SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0, "连接超时" + delay / 1000 + "秒将尝试切换为AP");
+                while (!needLeave) {
+                    //此处做打开wifi的操作
+                    wifiAdmin.openWifi();
+                    String ssid = wifiAdmin.searchWifi();
+                    if (ssid == null) {
+                        System.out.println("查找指定ssid失败");
+                        //return;
+                        if (needLeave) {
+                            break;
+                        }
+                        continue;
+                    }
+                    //连接网络的操作
+                    wifiAdmin.addNetwork(
+                            wifiAdmin.CreateWifiInfo(ssid, Constant.AP_PASS_WORD, 3)
+                    );
+                    //等待连接的时间为5s
+                    // Starting time.
+                    long startMili = System.currentTimeMillis();
+                    boolean timeOut = false;
+                    while (!wifiAdmin.isWifiConnected()) {
+                        //wifiAdmin.currentConnectSSID().equals(ssid)
+                        //等待连接
+                        try {
+                            Thread.sleep(100);
+                        } catch (InterruptedException e) {
+                            e.printStackTrace();
+                        }
+                        // Ending time.
+                        long endMili = System.currentTimeMillis();
+                        int time = (int) ((endMili - startMili) / 1000);
+                        if (time > 5) {
+                            SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
+                                    "连接指定wifi失败，正在重试"
+                            );
+                            System.out.println("连接指定wifi失败，正在重试");
+                            //openClient(); //重试
+                            timeOut = true;
+                            break;  //重试连接
+                            //return;
+                        }
+                    }
+                    if (timeOut) {
+                        continue;
+                    }
+
+                    SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
+                            "连接wifi成功"
+                    );
+                    //做连接ServerSocket的动作
+                    if (tcpClient.connectServer()) {
+                        //连接wifi和socket成功
+                        //取消定时切换任务
                         break;
                     }
-                    //等待连接
-                    try {
-                        Thread.sleep(100);
-                    } catch (InterruptedException e) {
-                        e.printStackTrace();
-                    }
-                    // Ending time.
-                    long endMili = System.currentTimeMillis();
-                    int time = (int) ((endMili - startMili) / 1000);
-                    if (time > 5) {
-                        SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
-                                "连接指定wifi失败，正在重试"
-                        );
-                        System.out.println("连接指定wifi失败，正在重试");
-                        openClient(); //重试
-                        return;
-                    }
                 }
-                SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
-                        "连接wifi成功"
-                );
-                //做连接ServerSocket的动作
-                if (!tcpClient.connectServer()) {
-                    openClient();  //重试
-                }
+                timer.cancel();
             }
         }).start();
     }
+
 
     //用来处理文件选择器
     private static final int FILE_CODE = 0;
