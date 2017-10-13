@@ -41,7 +41,7 @@ public class TcpServer {
     public ServerSocket svrSock;
     private ExecutorService mExecutorService = null;   //线程池
     private Handler handler;
-    private EncodeFile encodeFile;
+    // private EncodeFile encodeFile;
 
     private EncodeFile itsEncodeFile;
     //再编码线程是否循环执行的标志
@@ -53,7 +53,9 @@ public class TcpServer {
     private volatile boolean taskState;  //定时任务是否启动的状态字
     private long baseDelay = 20 * 1000;
     //表示即将拥有数据   为了防止数据的重复请求
-    private volatile boolean[] willHave;
+    //private volatile boolean[] willHave;
+    //检查server状态是否打开
+    private volatile boolean serverState = false;
 
     public TcpServer(Handler handler) {
         this.handler = handler;
@@ -67,80 +69,99 @@ public class TcpServer {
         //mTimer.cancel();
     }
 
-    public void openServerSocket(EncodeFile encodeFile) {
-        this.encodeFile = encodeFile;
-        willHave = new boolean[encodeFile.getTotalParts()];
-        Arrays.fill(willHave, false);
-        try {
-            svrSock = new ServerSocket(Constant.TCP_ServerPORT);
-            svrSock.setReuseAddress(true);   //设置上一个关闭的超时状态下可连接
+    public void openServerSocket(final boolean auto) {
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                if (serverState) {
+                    return;
+                }
+                //this.encodeFile = encodeFile;
+                //willHave = new boolean[GlobalVar.g_ef.getTotalParts()];
+                //Arrays.fill(willHave, false);
+                try {
+                    svrSock = new ServerSocket(Constant.TCP_ServerPORT);
+                    svrSock.setReuseAddress(true);   //设置上一个关闭的超时状态下可连接
 //            InetSocketAddress endpoint = new InetSocketAddress(Constant.TCP_ServerIP, Constant.TCP_ServerPORT);
 //            svrSock = new ServerSocket();
 //            svrSock.setReceiveBufferSize(1 * 1024 * 1024);
 //            svrSock.bind(endpoint);
-        } catch (IOException e) {
-            //失败
-            System.out.println("绑定端口失败");
-            e.printStackTrace();
-        }
-        SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0, "绑定端口成功");
-        // 创建线程池
-        mExecutorService = Executors.newCachedThreadPool();
-        Socket client = null;
-        //监听需要再编码的时机
-        if (!reencodeFlag) {
-            reencodeFlag = true;
-            reencodeListenerThread();
-        }
-        //定时任务的启动代码
-        startTimerTask();
-        System.out.println("(Server)定时任务已经启动");
-        //等待client连接
-        while (true) {
-            try {
-                //阻塞等待连接
-                client = svrSock.accept();
-            } catch (IOException e) {
-                e.printStackTrace();
-                break;
-            }
-            String client_ip = client.getInetAddress().toString();
-            for (int i = 0; i < socketList.size(); ++i) {
-                Socket s = socketList.get(i);
-                if (s.getInetAddress().toString().equals(client_ip)) {
+                } catch (IOException e) {
+                    //失败
+                    System.out.println("绑定端口失败");
+                    e.printStackTrace();
+                }
+                SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0, "绑定端口成功");
+
+                serverState = true;
+                // 创建线程池
+                mExecutorService = Executors.newCachedThreadPool();
+                Socket client = null;
+                //监听需要再编码的时机
+                if (!reencodeFlag) {
+                    reencodeFlag = true;
+                    reencodeListenerThread();
+                }
+                //定时任务的启动代码
+                //如果是由代码自动启动的server，则在此开启定时
+                //若是手动点击的，这里不做启动处理
+                if (auto) {
+                    startTimerTask();
+                }
+                System.out.println("(Server)定时任务已经启动");
+                //等待client连接
+                while (true) {
                     try {
-                        s.close();
-                        socketList.remove(i);
+                        //阻塞等待连接
+                        client = svrSock.accept();
                     } catch (IOException e) {
                         e.printStackTrace();
+                        break;
                     }
-                    break;
+                    String client_ip = client.getInetAddress().toString();
+                    for (int i = 0; i < socketList.size(); ++i) {
+                        Socket s = socketList.get(i);
+                        if (s.getInetAddress().toString().equals(client_ip)) {
+                            try {
+                                s.close();
+                                socketList.remove(i);
+                            } catch (IOException e) {
+                                e.printStackTrace();
+                            } catch (IndexOutOfBoundsException e) {
+                                //List机制
+                                //循环执行后，出现的未知异常
+                                e.printStackTrace();
+                            }
+                            break;
+                        }
+                    }
+
+                    socketList.add(client);
+                    SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
+                            client.getInetAddress() + "已连接");
+                    //启动一个线程处理与client的对话
+                    try {
+                        //设置发送缓存区大小
+                        client.setSendBufferSize(1 * 1024 * 1024);
+                        client.setSendBufferSize(1 * 1024 * 1024);
+                        client.setTcpNoDelay(true);
+                        int revSize = client.getReceiveBufferSize();
+                        int sendSize = client.getSendBufferSize();
+                        System.out.println("接收缓存区" + revSize + "   发送缓存区" + sendSize + " ");
+                        mExecutorService.execute(new ClientThread(client)); //启动一个新的线程来处理连接
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
                 }
             }
-
-            socketList.add(client);
-            SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
-                    client.getInetAddress() + "已连接");
-            //启动一个线程处理与client的对话
-            try {
-                //设置发送缓存区大小
-                client.setSendBufferSize(1 * 1024 * 1024);
-                client.setSendBufferSize(1 * 1024 * 1024);
-                client.setTcpNoDelay(true);
-                int revSize = client.getReceiveBufferSize();
-                int sendSize = client.getSendBufferSize();
-                System.out.println("接收缓存区" + revSize + "   发送缓存区" + sendSize + " ");
-                mExecutorService.execute(new ClientThread(client)); //启动一个新的线程来处理连接
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-        }
+        }).start();
     }
 
     public void closeServer() {
         //在这里不关闭ServerSocket
         //只关闭和client连接的socket
         //和再编码线程
+        serverState = false;
         int size = socketList.size();
         for (int i = 0; i < size; ++i) {
             try {
@@ -197,7 +218,7 @@ public class TcpServer {
         @Override
         public void run() {
             //发送给client xml文件
-            String xmlFilePath = encodeFile.getStoragePath() + File.separator + "xml.txt";
+            String xmlFilePath = GlobalVar.g_ef.getStoragePath() + File.separator + "xml.txt";
             sendFiles(xmlFilePath, false);
             byte[] getBytes = new byte[1024];
             while (socket.isConnected()) {
@@ -329,7 +350,7 @@ public class TcpServer {
                 e.printStackTrace();
             } catch (InterruptedException e) {
                 e.printStackTrace();
-            }catch (NullPointerException e){
+            } catch (NullPointerException e) {
                 e.printStackTrace();
             }
         }
@@ -347,95 +368,95 @@ public class TcpServer {
 
         //服务请求  向对方发送文件请求
         public void serviceAcquire() {
-            synchronized (ClientThread.class) {
-                if (itsEncodeFile == null) {
-                    return;
-                }
-                int[] usefulParts = encodeFile.findUsefulParts(itsEncodeFile);
-                //String requestCode = "";
-                if (usefulParts != null) {
-                    String requestCode = "";
-                    int requestNum = usefulParts.length;
-                    //
-                    int[] changeWillHaveFlag = null;
-                    for (int i = 0; i < requestNum; ++i) {
-                        //看下这部分是否即将拥有所有的文件
-                        int partNo = usefulParts[i];
-                        if (willHave[partNo - 1]) {
-                            //说明这部分文件即将拥有所有的文件，则不再请求
-                            continue;
-                        }
-                        requestCode += (usefulParts[i] + ",");
-                        //如果请求后，发现所有文件都已经满足，则把willHave位置位true
-                        for (PieceFile pieceFile : encodeFile.getPieceFileList()) {
-                            if (pieceFile.getPieceNo() == partNo) {
-                                if (pieceFile.getCurrentFileNum() == (pieceFile.getnK() - 1)) {
-                                    willHave[partNo - 1] = true;
-                                    if (changeWillHaveFlag == null) {
-                                        changeWillHaveFlag = new int[1];
-                                        changeWillHaveFlag[i] = partNo;
-                                    } else {
-                                        int len = changeWillHaveFlag.length;
-                                        int[] newArray = new int[len + 1];
-                                        newArray[len] = partNo;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    //启动一个定时任务    10s后清除 即将拥有标志
-                    if (changeWillHaveFlag != null) {
-                        cleanWillHaveFlag(changeWillHaveFlag);
-                    }
-                    //没有要请求的文件
-                    if (requestCode.equals("")) {
-                        //没有可供请求的文件了
-                        //告诉client不再请求数据了
-                        SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
-                                "(server）本地不再向"+client_ip+"请求数据");
-                        try {
-                            dos_Semaphore.acquire();
-                            dos.writeUTF(Constant.REQUEST_END);
-                            dos_Semaphore.release();
-                        } catch (IOException e) {
-                            e.printStackTrace();
-                        } catch (InterruptedException e) {
-                            e.printStackTrace();
-                        }
-                        return;
-                    }
-
-                    SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
-                            "对方拥有对我有用的数据，向对方发送文件请求");
-                    //表示将要发生实际的数据交换，此时要关闭定时任务
-                    //定时任务取消的代码
-                    cancelTimerTask();
-                    try {
-                        dos_Semaphore.acquire();
-                        dos.writeUTF(requestCode);
-                        dos_Semaphore.release();
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                    } catch (InterruptedException e) {
-                        e.printStackTrace();
-                    }
-                } else {
-                    //没有可供请求的文件了
-                    //告诉client不再请求数据了
-                    try {
-                        dos_Semaphore.acquire();
-                        dos.writeUTF(Constant.REQUEST_END);
-                        dos_Semaphore.release();
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                    } catch (InterruptedException e) {
-                        e.printStackTrace();
-                    }
-                    SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
-                            "(server）本地不再向"+client_ip+"请求数据");
-
-                }
+//            synchronized (ClientThread.class) {
+            if (itsEncodeFile == null) {
+                return;
             }
+            int[] usefulParts = GlobalVar.g_ef.findUsefulParts(itsEncodeFile);
+            //String requestCode = "";
+            if (usefulParts != null) {
+                String requestCode = "";
+                int requestNum = usefulParts.length;
+                //
+                int[] changeWillHaveFlag = null;
+                for (int i = 0; i < requestNum; ++i) {
+                    //看下这部分是否即将拥有所有的文件
+                    int partNo = usefulParts[i];
+//                        if (willHave[partNo - 1]) {
+//                            //说明这部分文件即将拥有所有的文件，则不再请求
+//                            continue;
+//                        }
+                    requestCode += (usefulParts[i] + ",");
+                    //如果请求后，发现所有文件都已经满足，则把willHave位置位true
+//                        for (PieceFile pieceFile : GlobalVar.g_ef.getPieceFileList()) {
+//                            if (pieceFile.getPieceNo() == partNo) {
+//                                if (pieceFile.getCurrentFileNum() == (pieceFile.getnK() - 1)) {
+//                                    willHave[partNo - 1] = true;
+//                                    if (changeWillHaveFlag == null) {
+//                                        changeWillHaveFlag = new int[1];
+//                                        changeWillHaveFlag[i] = partNo;
+//                                    } else {
+//                                        int len = changeWillHaveFlag.length;
+//                                        int[] newArray = new int[len + 1];
+//                                        newArray[len] = partNo;
+//                                    }
+//                                }
+//                            }
+                }
+                //}
+                //启动一个定时任务    10s后清除 即将拥有标志
+//                    if (changeWillHaveFlag != null) {
+//                        cleanWillHaveFlag(changeWillHaveFlag);
+//                    }
+                //没有要请求的文件
+//                    if (requestCode.equals("")) {
+//                        //没有可供请求的文件了
+//                        //告诉client不再请求数据了
+//                        SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
+//                                "(server）本地不再向" + client_ip + "请求数据");
+//                        try {
+//                            dos_Semaphore.acquire();
+//                            dos.writeUTF(Constant.REQUEST_END);
+//                            dos_Semaphore.release();
+//                        } catch (IOException e) {
+//                            e.printStackTrace();
+//                        } catch (InterruptedException e) {
+//                            e.printStackTrace();
+//                        }
+//                        return;
+//                    }
+
+                SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
+                        "对方拥有对我有用的数据，向对方发送文件请求");
+                //表示将要发生实际的数据交换，此时要关闭定时任务
+                //定时任务取消的代码
+                cancelTimerTask();
+                try {
+                    dos_Semaphore.acquire();
+                    dos.writeUTF(requestCode);
+                    dos_Semaphore.release();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            } else {
+                //没有可供请求的文件了
+                //告诉client不再请求数据了
+                try {
+                    dos_Semaphore.acquire();
+                    dos.writeUTF(Constant.REQUEST_END);
+                    dos_Semaphore.release();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+                SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
+                        "(server）本地不再向" + client_ip + "请求数据");
+
+            }
+
         }
 
         //处理文件请求信息   请求信息包含,逗号
@@ -449,7 +470,7 @@ public class TcpServer {
                         if (!strPart.equals("")) {
                             int partNo = Integer.parseInt(strPart);
                             //在本地找信息
-                            for (final PieceFile pieceFile : encodeFile.getPieceFileList()) {
+                            for (final PieceFile pieceFile : GlobalVar.g_ef.getPieceFileList()) {
                                 if (pieceFile.getPieceNo() == partNo) {
                                     //打印信息
                                     System.out.println("正在获取" + partNo + "部分再编码文件");
@@ -502,13 +523,13 @@ public class TcpServer {
                 String fileName = file.getName();
                 String strPartNo = fileName.substring(0, fileName.indexOf("."));
                 int partNo = Integer.parseInt(strPartNo);
-                for (PieceFile pieceFile : encodeFile.getPieceFileList()) {
+                for (PieceFile pieceFile : GlobalVar.g_ef.getPieceFileList()) {
                     if (pieceFile.getPieceNo() == partNo) {
                         if (pieceFile.addEncodeFile(file)) {
                             //更改已收到的编码数据片的个数
-                            encodeFile.updateCurrentSmallPiece();
+                            GlobalVar.g_ef.updateCurrentSmallPiece();
                             //写入xml配置文件
-                            encodeFile.object2xml();
+                            GlobalVar.g_ef.object2xml();
                         }
                         break;
                     }
@@ -517,8 +538,8 @@ public class TcpServer {
                 new Thread(new Runnable() {
                     @Override
                     public void run() {
-                        if (encodeFile.getCurrentSmallPiece() == encodeFile.getTotalSmallPiece()) {
-                            String filePath = encodeFile.getStoragePath() + File.separator + encodeFile.getFileName();
+                        if (GlobalVar.g_ef.getCurrentSmallPiece() == GlobalVar.g_ef.getTotalSmallPiece()) {
+                            String filePath = GlobalVar.g_ef.getStoragePath() + File.separator + GlobalVar.g_ef.getFileName();
                             File file = new File(filePath);
                             if (file.exists()) {
                                 //解码文件已经存在
@@ -526,9 +547,9 @@ public class TcpServer {
                             }
                             SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
                                     "本地已拥有所有的编码数据片，正在解码");
-                            if (encodeFile.recoveryFile()) {
+                            if (GlobalVar.g_ef.recoveryFile()) {
                                 SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
-                                        encodeFile.getFileName() + "解码成功");
+                                        GlobalVar.g_ef.getFileName() + "解码成功");
                                 //打开
                                 //SendMessage(MsgValue.DECODE_SUCCESS_OPEN_FILE, 0, 0, filePath);
                             } else {
@@ -547,7 +568,7 @@ public class TcpServer {
             String strPartNo = encodeFileName.substring(0, encodeFileName.indexOf("."));
             int partNo = Integer.parseInt(strPartNo);
             //构建文件存储路径
-            for (PieceFile pieceFile : encodeFile.getPieceFileList()) {
+            for (PieceFile pieceFile : GlobalVar.g_ef.getPieceFileList()) {
                 if (pieceFile.getPieceNo() == partNo) {
                     filePath = pieceFile.getEncodeFilePath() + File.separator + encodeFileName;
                     break;
@@ -556,20 +577,20 @@ public class TcpServer {
             //本地编码数据中没有此部分文件
             if (filePath.equals("")) {
                 int rightFileLen = 0;
-                if (partNo == encodeFile.getTotalParts()) {
-                    rightFileLen = encodeFile.getRightFileLen2();
+                if (partNo == GlobalVar.g_ef.getTotalParts()) {
+                    rightFileLen = GlobalVar.g_ef.getRightFileLen2();
                 } else {
-                    rightFileLen = encodeFile.getRightFileLen1();
+                    rightFileLen = GlobalVar.g_ef.getRightFileLen1();
                 }
                 PieceFile pieceFile = new PieceFile(
-                        encodeFile.getStoragePath(),
+                        GlobalVar.g_ef.getStoragePath(),
                         partNo,
-                        encodeFile.getnK(),
+                        GlobalVar.g_ef.getnK(),
                         rightFileLen
                 );
                 //添加进列表
-                encodeFile.getPieceFileList().add(pieceFile);
-                encodeFile.setCurrentParts(encodeFile.getCurrentParts() + 1);
+                GlobalVar.g_ef.getPieceFileList().add(pieceFile);
+                GlobalVar.g_ef.setCurrentParts(GlobalVar.g_ef.getCurrentParts() + 1);
                 filePath = pieceFile.getEncodeFilePath() + File.separator + encodeFileName;
             }
             return filePath;
@@ -577,10 +598,10 @@ public class TcpServer {
 
         //socket突然断开后，对本地变量做的异常处理
         public synchronized void socketExceptionHandle() {
-            if (encodeFile == null) {
+            if (GlobalVar.g_ef == null) {
                 return;
             }
-            for (PieceFile pieceFile : encodeFile.getPieceFileList()) {
+            for (PieceFile pieceFile : GlobalVar.g_ef.getPieceFileList()) {
                 pieceFile.handleDataSynError();
             }
         }
@@ -588,29 +609,29 @@ public class TcpServer {
     }
 
     //删除部分文件即将拥有标志
-    public void cleanWillHaveFlag(final int[] changeWillHaveFlag) {
-        //初始化mTimer和mTimerTask
-        TimerTask timerTask = new TimerTask() {
-            @Override
-            public void run() {
-                // task to run goes here
-                int len = changeWillHaveFlag.length;
-                for (int i = 0; i < len; ++i) {
-                    int partNo = changeWillHaveFlag[i];
-                    if (willHave[partNo - 1]) {
-                        willHave[partNo - 1] = false;
-                    }
-                }
-            }
-        };
-        Timer timer = new Timer();
-        //mTimer = new Timer();
-        //long delay = 0;
-        // schedules the task to be run in an interval
-        //定时任务的启动代码
-        long delay = 10 * 1000;
-        timer.schedule(timerTask, delay);
-    }
+//    public void cleanWillHaveFlag(final int[] changeWillHaveFlag) {
+//        //初始化mTimer和mTimerTask
+//        TimerTask timerTask = new TimerTask() {
+//            @Override
+//            public void run() {
+//                // task to run goes here
+//                int len = changeWillHaveFlag.length;
+//                for (int i = 0; i < len; ++i) {
+//                    int partNo = changeWillHaveFlag[i];
+//                    if (willHave[partNo - 1]) {
+//                        willHave[partNo - 1] = false;
+//                    }
+//                }
+//            }
+//        };
+//        Timer timer = new Timer();
+//        //mTimer = new Timer();
+//        //long delay = 0;
+//        // schedules the task to be run in an interval
+//        //定时任务的启动代码
+//        long delay = 10 * 1000;
+//        timer.schedule(timerTask, delay);
+//    }
 
     public void startTimerTask() {
         //
@@ -636,9 +657,10 @@ public class TcpServer {
         // schedules the task to be run in an interval
         //定时任务的启动代码
         Random random = new Random(System.currentTimeMillis());
-        int diff = random.nextInt(30);
+        int diff = random.nextInt(20);
         long delay = baseDelay + diff * 1000;
         mTimer.schedule(mTimerTask, delay);
+
         taskState = true;
         SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
                 "(server）定时任务已经开启，" + (delay / 1000) + "秒后切换状态");
@@ -662,22 +684,22 @@ public class TcpServer {
         new Thread(new Runnable() {
             @Override
             public void run() {
-                if (encodeFile != null) {
+                if (GlobalVar.g_ef != null) {
                     //删除之前没删掉的xml.txt
                     ArrayList<File> xmlFiles = MyFileUtils.getList_1_files(GlobalVar.getTempPath());
                     for (File file : xmlFiles) {
                         file.delete();
                     }
                     //清空发送缓存中没来得及删除的文件
-                    for (PieceFile pieceFile : encodeFile.getPieceFileList()) {
+                    for (PieceFile pieceFile : GlobalVar.g_ef.getPieceFileList()) {
                         MyFileUtils.deleteAllFile(pieceFile.getSendBufferPath(), false);
                     }
                 }
                 while (reencodeFlag) {
-                    if (encodeFile == null) {
+                    if (GlobalVar.g_ef == null) {
 
                     } else {
-                        for (PieceFile pieceFile : encodeFile.getPieceFileList()) {
+                        for (PieceFile pieceFile : GlobalVar.g_ef.getPieceFileList()) {
                             if (!pieceFile.isHaveSendFile()) {
                                 if (!pieceFile.isReencoding()) {
                                     pieceFile.re_encodeFile();

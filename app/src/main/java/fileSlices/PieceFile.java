@@ -212,7 +212,7 @@ public class PieceFile {
         ArrayList<File> fileArrayList = MyFileUtils.getList_1_files(re_encodeFilePath);
         File file = fileArrayList.get(0);
         System.out.println("已获取到再编码文件,正在剪切");
-        File transferFile = MyFileUtils.moveFile(file, sendBufferPath);
+        File transferFile = MyFileUtils.moveFile(file, sendBufferPath, true);
         haveSendFile = false;
         return transferFile.getPath();
 //        ArrayList<File> files = MyFileUtils.getListFiles(re_encodeFilePath);

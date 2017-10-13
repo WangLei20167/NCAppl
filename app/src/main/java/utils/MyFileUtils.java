@@ -372,8 +372,9 @@ public class MyFileUtils {
      *
      * @param file_source
      * @param targetPath
+     * @param deleteOriginFile 是否删除原文件
      */
-    public static File moveFile(File file_source, String targetPath) {
+    public static File moveFile(File file_source, String targetPath, boolean deleteOriginFile) {
         String fileName = file_source.getName();
 
         File file_target = new File(targetPath + File.separator + fileName);
@@ -406,7 +407,9 @@ public class MyFileUtils {
             }
         }
         //删除源文件
-        file_source.delete();
+        if (deleteOriginFile) {
+            file_source.delete();
+        }
         return file_target;
     }
 
@@ -465,6 +468,7 @@ public class MyFileUtils {
 
     /**
      * 根据文件路径或是File对象打开文件
+     *
      * @param objFile File对象，或是文件路径
      * @param context
      * @return 打开成功返回true，否则false

@@ -54,12 +54,13 @@ public class MainActivity extends AppCompatActivity {
     Timer timer;
     volatile boolean needLeave;
 
+
     //对打开文件选择器时 显示的路径进行控制
     private String startPath;
     //编码数据
     //注意无论时server状态还是client状态
     //操作的都是这一个变量
-    private volatile EncodeFile encodeFile;
+    //private volatile EncodeFile encodeFile;
     private int GenerationSize;
 
     TextView tv_promptMsg;
@@ -95,8 +96,9 @@ public class MainActivity extends AppCompatActivity {
         bt_openServer.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                //
-                openServer();
+                //在这里要对手动server启动 和 自动启动 做区分
+                //手动启动的话，开启server，必须是client离开时，启动定时向普通节点转化
+                openServer(false);
             }
         });
         //客户端按钮
@@ -144,7 +146,7 @@ public class MainActivity extends AppCompatActivity {
                                  * returning false here won't allow the newly selected radio button to actually be selected.
                                  **/
                                 String xmlFilePath = GlobalVar.getTempPath() + File.separator + text + File.separator + "xml.txt";
-                                encodeFile = EncodeFile.xml2object(xmlFilePath, true);
+                                GlobalVar.g_ef = EncodeFile.xml2object(xmlFilePath, true);
                                 return true;
                             }
                         })
@@ -156,8 +158,8 @@ public class MainActivity extends AppCompatActivity {
 
     //测试方法
     public void onTest(View view) {
-        if (encodeFile != null) {
-            for (final PieceFile pieceFile : encodeFile.getPieceFileList()) {
+        if (GlobalVar.g_ef != null) {
+            for (final PieceFile pieceFile : GlobalVar.g_ef.getPieceFileList()) {
                 new Thread(new Runnable() {
                     @Override
                     public void run() {
@@ -168,39 +170,67 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    //运行Server
-    public void openServer() {
+    //运行Server server状态锁
+    public volatile boolean serverLocked = false;
+
+    public void openServer(final boolean auto) {
+        if (serverLocked) {
+            return;
+        }
         //先要执行打开ap操作
         //开启AP
         new Thread(new Runnable() {
             @Override
             public void run() {
+                //锁上
+                serverLocked = true;
+                SendMessage(MsgValue.TELL_ME_SOME_INFOR,0,0,"server上锁");
                 timer.cancel();
                 //关闭处理client的操作
                 tcpClient.closeSocket();
-                if (encodeFile == null) {
-                    SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0, "encodeFile变量为null");
+                //关闭server的操作
+                tcpSvr.closeServer();
+                if (GlobalVar.g_ef == null) {
+                    SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0, "GlobalVar.g_ef变量为null");
+                    //指令更为开启client状态
+                    if (auto) {
+                        openClient();
+                    }
+                    serverLocked = false;
                     return;
                 }
                 if (apHelper.setWifiApEnabled(APHelper.createWifiCfg(), true)) {
                     SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0, "AP打开成功");
                     //执行打开server的动作
-                    tcpSvr.openServerSocket(encodeFile);
+                    tcpSvr.openServerSocket(auto);
                 } else {
                     SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0, "AP打开失败");
                 }
+                //开锁
+                serverLocked = false;
+                SendMessage(MsgValue.TELL_ME_SOME_INFOR,0,0,"server开锁");
             }
         }).start();
     }
 
     //运行client
+    public volatile boolean clientLocked = false;
+
     public void openClient() {
+        if (clientLocked) {
+            return;
+        }
         new Thread(new Runnable() {
             @Override
             public void run() {
+                //锁上
+                clientLocked = true;
+                SendMessage(MsgValue.TELL_ME_SOME_INFOR,0,0,"client上锁");
                 timer.cancel();
                 //关闭server的操作
                 tcpSvr.closeServer();
+                //防止client状态重开
+                tcpClient.closeSocket();
                 //在此开启一个定时任务
                 needLeave = false;
                 //如果一段时间没有连接上wifi,则尝试切换为server状态
@@ -210,7 +240,7 @@ public class MainActivity extends AppCompatActivity {
                         // task to run goes here
                         //切换向AP节点
                         //SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0, "定时任务运行");
-                        if (encodeFile != null) {
+                        if (GlobalVar.g_ef != null) {
                             needLeave = true;
                             SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0, "client切换向server");
                             SendMessage(MsgValue.CLIENT_2_SERVER, 0, 0, null);
@@ -257,11 +287,14 @@ public class MainActivity extends AppCompatActivity {
                         // Ending time.
                         long endMili = System.currentTimeMillis();
                         int time = (int) ((endMili - startMili) / 1000);
+                        //超时未连接
                         if (time > 5) {
-                            SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
-                                    "连接指定wifi失败，正在重试"
-                            );
-                            System.out.println("连接指定wifi失败，正在重试");
+                            if(!needLeave) {
+                                SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
+                                        "连接指定wifi失败，正在重试"
+                                );
+                                System.out.println("连接指定wifi失败，正在重试");
+                            }
                             //openClient(); //重试
                             timeOut = true;
                             break;  //重试连接
@@ -271,10 +304,11 @@ public class MainActivity extends AppCompatActivity {
                     if (timeOut) {
                         continue;
                     }
-
-                    SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
-                            "连接wifi成功"
-                    );
+                    if(wifiAdmin.currentConnectSSID().equals(ssid)) {
+                        SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
+                                "连接wifi成功"
+                        );
+                    }
                     //做连接ServerSocket的动作
                     if (tcpClient.connectServer()) {
                         //连接wifi和socket成功
@@ -283,6 +317,9 @@ public class MainActivity extends AppCompatActivity {
                     }
                 }
                 timer.cancel();
+                //开锁
+                SendMessage(MsgValue.TELL_ME_SOME_INFOR,0,0,"client开锁");
+                clientLocked = false;
             }
         }).start();
     }
@@ -334,9 +371,9 @@ public class MainActivity extends AppCompatActivity {
                 public void run() {
                     SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
                             "正在对" + file.getName() + "进行编码");
-                    encodeFile = new EncodeFile(file.getName(), GenerationSize, null);
+                    GlobalVar.g_ef = new EncodeFile(file.getName(), GenerationSize, null);
                     //编码
-                    encodeFile.cutFile(file);
+                    GlobalVar.g_ef.cutFile(file);
                     //encodeFile.recoveryFile();
                     SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
                             "编码完成");
@@ -359,17 +396,12 @@ public class MainActivity extends AppCompatActivity {
                     //滚动到最下面
                     scrollView.fullScroll(ScrollView.FOCUS_DOWN);
                     break;
-                //把client中的localEncodeFile变量传值给主线程
-                case MsgValue.CLIENT_CHANGE_ENCODEFILR:
-                    encodeFile = (EncodeFile) msg.obj;
-                    System.out.println("client把localEncodeFile的值传给主线程encodeFile");
-                    break;
                 //client切换向server
                 case MsgValue.CLIENT_2_SERVER:
                     //测试encodeFile变量
                     System.out.println("client向server切换");
                     //EncodeFile encodeFile0 = encodeFile;
-                    openServer();
+                    openServer(true);
                     break;
                 //server切换向client
                 case MsgValue.SERVER_2_CLIENT:

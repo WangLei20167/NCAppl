@@ -75,7 +75,7 @@ public class EncodeFile {
     }
 
     //对文件进行分片 分成每10M一个部分，在送去编码
-    public void cutFile(File originFile) {
+    public void cutFile(final File originFile) {
         int fileLen = (int) originFile.length();
         int file_piece_len = 10 * 1024 * 1024;  //若是大于10M的文件，对文件进行分片，每片10M
         int piece_num = fileLen / file_piece_len + (fileLen % file_piece_len != 0 ? 1 : 0);
@@ -142,6 +142,13 @@ public class EncodeFile {
         totalSmallPiece = currentSmallPiece;
         //把配置存入xml文件
         object2xml();
+        //把源文件复制到现在的编码文件目录下一份
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                MyFileUtils.moveFile(originFile,storagePath,false);
+            }
+        }).start();
     }
 
     //恢复文件   解码文件
