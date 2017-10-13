@@ -49,6 +49,7 @@ public class MainActivity extends AppCompatActivity {
     private WifiAdmin wifiAdmin;
     TcpServer tcpSvr;
     TcpClient tcpClient;
+
     //一个定时器   client长时间无法连接上socket时调用
     Timer timer;
     volatile boolean needLeave;
