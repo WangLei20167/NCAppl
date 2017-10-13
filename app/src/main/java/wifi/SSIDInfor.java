@@ -9,7 +9,10 @@ package wifi;
 public class SSIDInfor {
     private String strSSID;
     private int usefulFileNum;
-    private int connectWeight = 0;
+    //如果之前的ssid列表，没有此ssid，权重50作为基数
+    public static int weightBase = 50;
+    private int weight;
+    private int signalWeight;
 
     public String getStrSSID() {
         return strSSID;
@@ -27,11 +30,19 @@ public class SSIDInfor {
         this.usefulFileNum = usefulFileNum;
     }
 
-    public int getConnectWeight() {
-        return connectWeight;
+    public int getWeight() {
+        return weight;
     }
 
-    public void setConnectWeight(int connectWeight) {
-        this.connectWeight = connectWeight;
+    public void setWeight(int weight) {
+        this.weight = weight;
+    }
+
+    public int getSignalWeight() {
+        return signalWeight;
+    }
+
+    public void setSignalWeight(int signalWeight) {
+        this.signalWeight = signalWeight;
     }
 }

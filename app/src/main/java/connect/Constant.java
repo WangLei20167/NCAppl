@@ -16,4 +16,6 @@ public class Constant {
     //指令
     public final static String ANSWER_END = "answerEnd";  //一次应答结束
 
+    public final static String REQUEST_END = "requestEnd"; //不再进行文件请求了
+
 }

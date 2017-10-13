@@ -41,6 +41,10 @@ public class TcpClient {
     private volatile int requestFileNum = 0;
     //再编码线程是否循环执行的标志
     private volatile boolean reencodeFlag = false;
+    //判断什么时候离开
+    //初始状态0，发送完或是接收完+1
+    //当为2时，离开
+    private int leaveFlag = 0;
 
     public TcpClient(Handler handler) {
         this.handler = handler;
@@ -85,6 +89,7 @@ public class TcpClient {
             }
 
             SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0, "连接ServerSocket成功");
+            leaveFlag = 0;
             socket.setReceiveBufferSize(1 * 1024 * 1024);
             socket.setSendBufferSize(1 * 1024 * 1024);
             socket.setTcpNoDelay(true);
@@ -110,7 +115,7 @@ public class TcpClient {
         @Override
         public void run() {
             byte[] getBytes = new byte[1024];
-            while (socket.isConnected()) {
+            while (socket != null && socket.isConnected()) {
                 try {
                     //获取文件名称  或是指令   在此做一个判断
                     String fileNameOrOrder = in.readUTF();
@@ -118,6 +123,17 @@ public class TcpClient {
                     String filePath = "";
                     if (fileNameOrOrder.equals("xml.txt")) {
                         filePath = GlobalVar.getTempPath() + File.separator + "xml.txt";
+                    } else if (fileNameOrOrder.equals(Constant.REQUEST_END)) {
+                        //离开标志
+                        ++leaveFlag;
+                        //
+                        if (leaveFlag == 2) {
+                            //执行离开操作
+                            SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
+                                    "与server的交互结束，按照策略，开始切换为AP模式");
+                            SendMessage(MsgValue.CLIENT_2_SERVER, 0, 0, null);
+                        }
+                        continue;
                     } else if (fileNameOrOrder.equals(Constant.ANSWER_END)) {
                         //一次服务请求结束  再次请求服务
                         SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
@@ -130,7 +146,8 @@ public class TcpClient {
                             //关闭socket
                             //closeSocket();  在打开server状态时，写有关闭client的操作
                             //返回到主线程   执行开启AP
-                            SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0, "client切换为server");
+                            SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
+                                    "已收到一半的数据，按照策略，开始切换为AP模式");
                             SendMessage(MsgValue.CLIENT_2_SERVER, 0, 0, null);
                             //跳出循环
                             break;
@@ -264,6 +281,7 @@ public class TcpClient {
         String fileName = itsEncodeFile.getFileName();
         String folderName = itsEncodeFile.getFolderName();
         ArrayList<File> folders = MyFileUtils.getListFolders(GlobalVar.getTempPath());
+        localEncodeFile = null;
         for (File folder : folders) {
             if (folder.getName().equals(folderName)) {
                 String xmlFilePath = folder.getPath() + File.separator + "xml.txt";
@@ -328,30 +346,16 @@ public class TcpClient {
                 e.printStackTrace();
             }
         } else {
-            new Thread(new Runnable() {
-                @Override
-                public void run() {
-                    if (localEncodeFile.getCurrentSmallPiece() == localEncodeFile.getTotalSmallPiece()) {
-                        String filePath = localEncodeFile.getStoragePath() + File.separator + localEncodeFile.getFileName();
-                        File file = new File(filePath);
-                        if (file.exists()) {
-                            //解码文件已经存在
-                            return;
-                        }
-                        SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
-                                "本地已拥有所有的编码数据片，正在解码");
-                        if (localEncodeFile.recoveryFile()) {
-                            SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
-                                    localEncodeFile.getFileName() + "解码成功");
-                            //打开
-                            //SendMessage(MsgValue.DECODE_SUCCESS_OPEN_FILE, 0, 0, filePath);
-                        } else {
-                            SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
-                                    "解码失败");
-                        }
-                    }
-                }
-            }).start();
+            //离开标志
+            ++leaveFlag;
+            //
+            if (leaveFlag == 2) {
+                //执行离开操作
+                SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
+                        "与server的交互结束，按照策略，开始切换为AP模式");
+                SendMessage(MsgValue.CLIENT_2_SERVER, 0, 0, null);
+            }
+
         }
     }
 
@@ -413,6 +417,31 @@ public class TcpClient {
                 break;
             }
         }
+        //尝试解码
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                if (localEncodeFile.getCurrentSmallPiece() == localEncodeFile.getTotalSmallPiece()) {
+                    String filePath = localEncodeFile.getStoragePath() + File.separator + localEncodeFile.getFileName();
+                    File file = new File(filePath);
+                    if (file.exists()) {
+                        //解码文件已经存在
+                        return;
+                    }
+                    SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
+                            "本地已拥有所有的编码数据片，正在解码");
+                    if (localEncodeFile.recoveryFile()) {
+                        SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
+                                localEncodeFile.getFileName() + "解码成功");
+                        //打开
+                        //SendMessage(MsgValue.DECODE_SUCCESS_OPEN_FILE, 0, 0, filePath);
+                    } else {
+                        SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
+                                "解码失败");
+                    }
+                }
+            }
+        }).start();
     }
 
     public void sendfile(String filepath, boolean deleteFile) {
@@ -442,6 +471,8 @@ public class TcpClient {
         } catch (IOException e) {
             e.printStackTrace();
         } catch (InterruptedException e) {
+            e.printStackTrace();
+        } catch (NullPointerException e) {
             e.printStackTrace();
         }
 

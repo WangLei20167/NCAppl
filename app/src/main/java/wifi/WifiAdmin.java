@@ -64,7 +64,7 @@ public class WifiAdmin {
             apHelper.setWifiApEnabled(null, false);
         }
         //等待ap关闭
-        while(apHelper.isApEnabled()){
+        while (apHelper.isApEnabled()) {
             try {
                 Thread.sleep(100);
             } catch (InterruptedException e) {
@@ -285,12 +285,8 @@ public class WifiAdmin {
         } while (mWifiManager.isWifiEnabled());
         //在此usefulWifiList列表进行wifi选择
         //选择后，返回一个ScanResult类型的值
-        if (scanResult0 != null) {
-            String resultSSID = scanResult0.SSID;
-            return resultSSID;
-        } else {
-            return null;
-        }
+        String resultSSID = WifiConnectCtrl.selectSSID(usefulWifiList, mWifiManager);
+        return resultSSID;
     }
 
     //获取当前wifi连接的ssid
