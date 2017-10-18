@@ -51,11 +51,13 @@ public class TcpServer {
     private Timer mTimer;
     //private TimerTask mTimerTask;
     private volatile boolean taskState;  //定时任务是否启动的状态字
-    private long baseDelay = 20 * 1000;
+    private long baseDelay = 10 * 1000;
     //表示即将拥有数据   为了防止数据的重复请求
     //private volatile boolean[] willHave;
     //检查server状态是否打开
     private volatile boolean serverState = false;
+    //解码锁   防止多次进入解锁
+    public volatile boolean decoding = false;
 
     public TcpServer(Handler handler) {
         this.handler = handler;
@@ -93,6 +95,7 @@ public class TcpServer {
                 }
                 SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0, "绑定端口成功");
 
+                decoding = false;
                 serverState = true;
                 // 创建线程池
                 mExecutorService = Executors.newCachedThreadPool();
@@ -106,7 +109,15 @@ public class TcpServer {
                 //如果是由代码自动启动的server，则在此开启定时
                 //若是手动点击的，这里不做启动处理
                 if (auto) {
+                    //自动启动的  开启定时转换
                     startTimerTask();
+                } else {
+                    //如果是手动的点的  则写入日志
+                    String time = LocalInfor.getCurrentTime("yy-MM-dd HH:mm:ss");
+                    String fileName = GlobalVar.g_ef.getFileName();
+                    SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
+                            time + "  " + fileName + " " + "开始分享");
+                    MyFileUtils.writeLog(MyFileUtils.SEND_TYPE, time, fileName);
                 }
                 System.out.println("(Server)定时任务已经启动");
                 //等待client连接
@@ -118,6 +129,9 @@ public class TcpServer {
                         e.printStackTrace();
                         break;
                     }
+//                    catch (NullPointerException e){
+//                        e.printStackTrace();
+//                    }
                     String client_ip = client.getInetAddress().toString();
                     for (int i = 0; i < socketList.size(); ++i) {
                         Socket s = socketList.get(i);
@@ -192,6 +206,9 @@ public class TcpServer {
         private DataOutputStream dos = null; //发送
         public Semaphore dos_Semaphore = new Semaphore(1);
 
+        public volatile long startTime = 0;//接收到文件请求的时间
+        public volatile long serverDelay = 0;//从发送文件请求到返回给它文件的延迟
+
         //private InputStream inputStream;
 
         public ClientThread(Socket socket) {
@@ -240,11 +257,13 @@ public class TcpServer {
                         continue;
                     } else if (fileNameOrOrder.contains(",")) {
                         //这个是文件请求信息
+                        startTime = System.currentTimeMillis();
                         SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
                                 client_ip + "发起文件请求" + ",请求码" + fileNameOrOrder);
                         //新开的线程
                         //为了保证发送和接收是互不影响的
                         System.out.println("收到文件请求" + fileNameOrOrder);
+
                         //表示将要发生实际的数据交换，此时要关闭定时任务
                         //定时任务取消的代码
                         cancelTimerTask();
@@ -454,9 +473,7 @@ public class TcpServer {
                 }
                 SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
                         "(server）本地不再向" + client_ip + "请求数据");
-
             }
-
         }
 
         //处理文件请求信息   请求信息包含,逗号
@@ -466,6 +483,8 @@ public class TcpServer {
                 public void run() {
                     System.out.println("（server)发送文件线程已经在运行");
                     String[] strParts = requestOrder.split(",");
+                    //只测第一个文件获取的时延
+                    boolean first = true;
                     for (String strPart : strParts) {
                         if (!strPart.equals("")) {
                             int partNo = Integer.parseInt(strPart);
@@ -474,7 +493,23 @@ public class TcpServer {
                                 if (pieceFile.getPieceNo() == partNo) {
                                     //打印信息
                                     System.out.println("正在获取" + partNo + "部分再编码文件");
-                                    String reEncodeFilePath = pieceFile.getReencodeFile();
+//                                    while (!pieceFile.isHaveSendFile()) {
+//                                        System.out.println("获取文件时,haveSendFile为false," + "正在循环等待再编码文件");
+//                                    }
+
+                                    //String reEncodeFilePath = pieceFile.getReencodeFile();
+                                    String s = pieceFile.getReencodeFile();
+                                    String[] split = s.split("#");
+                                    long delay0 = Integer.parseInt(split[0]);
+                                    String reEncodeFilePath = split[1];
+
+                                    if (first) {
+                                        long endTime = System.currentTimeMillis();
+                                        serverDelay = endTime - startTime - delay0;
+                                        SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
+                                                client_ip + "文件获取时延为" + serverDelay + " ms");
+                                        first = false;
+                                    }
                                     //发送给用户
                                     System.out.println("获取到再编码文件" + reEncodeFilePath);
                                     sendFiles(reEncodeFilePath, true);
@@ -512,55 +547,6 @@ public class TcpServer {
 
         }
 
-        //接收到文件后   改变EncodeFile变量
-        //在服务器端这里需要引入同步
-        //这个方法对encodeFile进行了更改
-        //因此需要互斥的进入执行
-        //需要加入类锁
-        public void solveFileChange(File file) {
-            //类锁
-            synchronized (TcpServer.class) {
-                String fileName = file.getName();
-                String strPartNo = fileName.substring(0, fileName.indexOf("."));
-                int partNo = Integer.parseInt(strPartNo);
-                for (PieceFile pieceFile : GlobalVar.g_ef.getPieceFileList()) {
-                    if (pieceFile.getPieceNo() == partNo) {
-                        if (pieceFile.addEncodeFile(file)) {
-                            //更改已收到的编码数据片的个数
-                            GlobalVar.g_ef.updateCurrentSmallPiece();
-                            //写入xml配置文件
-                            GlobalVar.g_ef.object2xml();
-                        }
-                        break;
-                    }
-                }
-                //尝试解码
-                new Thread(new Runnable() {
-                    @Override
-                    public void run() {
-                        if (GlobalVar.g_ef.getCurrentSmallPiece() == GlobalVar.g_ef.getTotalSmallPiece()) {
-                            String filePath = GlobalVar.g_ef.getStoragePath() + File.separator + GlobalVar.g_ef.getFileName();
-                            File file = new File(filePath);
-                            if (file.exists()) {
-                                //解码文件已经存在
-                                return;
-                            }
-                            SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
-                                    "本地已拥有所有的编码数据片，正在解码");
-                            if (GlobalVar.g_ef.recoveryFile()) {
-                                SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
-                                        GlobalVar.g_ef.getFileName() + "解码成功");
-                                //打开
-                                //SendMessage(MsgValue.DECODE_SUCCESS_OPEN_FILE, 0, 0, filePath);
-                            } else {
-                                SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
-                                        "解码失败");
-                            }
-                        }
-                    }
-                }).start();
-            }
-        }
 
         //获取文件存储地址
         public String getEncodeFileStrogePath(String encodeFileName) {
@@ -608,6 +594,71 @@ public class TcpServer {
 
     }
 
+    //接收到文件后   改变EncodeFile变量
+    //在服务器端这里需要引入同步
+    //这个方法对encodeFile进行了更改
+    //因此需要互斥的进入执行
+    //需要加入类锁
+
+    public void solveFileChange(File file) {
+        //类锁
+        synchronized (TcpServer.class) {
+            String fileName = file.getName();
+            String strPartNo = fileName.substring(0, fileName.indexOf("."));
+            int partNo = Integer.parseInt(strPartNo);
+            for (PieceFile pieceFile : GlobalVar.g_ef.getPieceFileList()) {
+                if (pieceFile.getPieceNo() == partNo) {
+                    if (pieceFile.addEncodeFile(file)) {
+                        //更改已收到的编码数据片的个数
+                        GlobalVar.g_ef.updateCurrentSmallPiece();
+                        //写入xml配置文件
+                        GlobalVar.g_ef.object2xml();
+                    }
+                    break;
+                }
+            }
+
+            //尝试解码
+            new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    if (GlobalVar.g_ef.getCurrentSmallPiece() == GlobalVar.g_ef.getTotalSmallPiece()) {
+                        //访问解码锁
+                        //正在解码，则不访问
+                        if (decoding) {
+                            return;
+                        }
+                        //上锁 不允许别的线程再进入
+                        decoding = true;
+                        String filePath = GlobalVar.g_ef.getStoragePath() + File.separator + GlobalVar.g_ef.getFileName();
+                        File file = new File(filePath);
+                        if (file.exists()) {
+                            //解码文件已经存在
+                            return;
+                        }
+                        SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
+                                "本地已拥有所有的编码数据片，正在解码");
+                        if (GlobalVar.g_ef.recoveryFile()) {
+                            SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
+                                    GlobalVar.g_ef.getFileName() + "解码成功");
+                            String time = LocalInfor.getCurrentTime("yy-MM-dd HH:mm:ss");
+                            String fileName = GlobalVar.g_ef.getFileName();
+                            SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
+                                    time + "  " + fileName + " " + "接收完成");
+                            MyFileUtils.writeLog(MyFileUtils.REV_TYPE, time, fileName);
+                            //打开
+                            //SendMessage(MsgValue.DECODE_SUCCESS_OPEN_FILE, 0, 0, filePath);
+                        } else {
+                            SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
+                                    "解码失败");
+                        }
+                        //开锁  允许进入
+                        decoding = false;
+                    }
+                }
+            }).start();
+        }
+    }
     //删除部分文件即将拥有标志
 //    public void cleanWillHaveFlag(final int[] changeWillHaveFlag) {
 //        //初始化mTimer和mTimerTask
@@ -699,16 +750,24 @@ public class TcpServer {
                     if (GlobalVar.g_ef == null) {
 
                     } else {
-                        for (PieceFile pieceFile : GlobalVar.g_ef.getPieceFileList()) {
+                        int size = GlobalVar.g_ef.getPieceFileList().size();
+                        for (int i = 0; i < size; ++i) {
+                            final PieceFile pieceFile = GlobalVar.g_ef.getPieceFileList().get(i);
                             if (!pieceFile.isHaveSendFile()) {
                                 if (!pieceFile.isReencoding()) {
-                                    pieceFile.re_encodeFile();
+                                    //在这里重开一个子线程执行
+                                    new Thread(new Runnable() {
+                                        @Override
+                                        public void run() {
+                                            pieceFile.re_encodeFile();
+                                        }
+                                    }).start();
                                 }
                             }
                         }
                     }
                     try {
-                        Thread.sleep(100);
+                        Thread.sleep(30);
                     } catch (InterruptedException e) {
                         e.printStackTrace();
                     }

@@ -33,6 +33,8 @@ import java.util.Timer;
 import java.util.TimerTask;
 
 import appData.GlobalVar;
+import runtimepermissions.PermissionsManager;
+import runtimepermissions.PermissionsResultAction;
 import wifi.APHelper;
 import connect.Constant;
 import connect.TcpClient;
@@ -70,8 +72,10 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        //
+        requestPermission();
         //初始化全局变量   文件存放地址
-        GlobalVar.initial(this);
+         GlobalVar.initial(this);
         //全局抓取异常   世界警察
         AECrashHelper.initCrashHandler(getApplication(),
                 new AECHConfiguration.Builder()
@@ -184,7 +188,9 @@ public class MainActivity extends AppCompatActivity {
             public void run() {
                 //锁上
                 serverLocked = true;
-                SendMessage(MsgValue.TELL_ME_SOME_INFOR,0,0,"server上锁");
+                SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0, "server上锁");
+                //关闭client的重试连接
+                needLeave = true;
                 timer.cancel();
                 //关闭处理client的操作
                 tcpClient.closeSocket();
@@ -197,6 +203,7 @@ public class MainActivity extends AppCompatActivity {
                         openClient();
                     }
                     serverLocked = false;
+                    SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0, "server开锁");
                     return;
                 }
                 if (apHelper.setWifiApEnabled(APHelper.createWifiCfg(), true)) {
@@ -208,7 +215,7 @@ public class MainActivity extends AppCompatActivity {
                 }
                 //开锁
                 serverLocked = false;
-                SendMessage(MsgValue.TELL_ME_SOME_INFOR,0,0,"server开锁");
+                SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0, "server开锁");
             }
         }).start();
     }
@@ -225,7 +232,7 @@ public class MainActivity extends AppCompatActivity {
             public void run() {
                 //锁上
                 clientLocked = true;
-                SendMessage(MsgValue.TELL_ME_SOME_INFOR,0,0,"client上锁");
+                SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0, "client上锁");
                 timer.cancel();
                 //关闭server的操作
                 tcpSvr.closeServer();
@@ -238,8 +245,7 @@ public class MainActivity extends AppCompatActivity {
                     @Override
                     public void run() {
                         // task to run goes here
-                        //切换向AP节点
-                        //SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0, "定时任务运行");
+                        //尝试切换向AP节点
                         if (GlobalVar.g_ef != null) {
                             needLeave = true;
                             SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0, "client切换向server");
@@ -268,6 +274,10 @@ public class MainActivity extends AppCompatActivity {
                         }
                         continue;
                     }
+                    //如果当前wifi是连接状态，则断开当前连接
+                    if(wifiAdmin.isWifiConnected()){
+                        wifiAdmin.disconnectWifi();
+                    }
                     //连接网络的操作
                     wifiAdmin.addNetwork(
                             wifiAdmin.CreateWifiInfo(ssid, Constant.AP_PASS_WORD, 3)
@@ -289,7 +299,7 @@ public class MainActivity extends AppCompatActivity {
                         int time = (int) ((endMili - startMili) / 1000);
                         //超时未连接
                         if (time > 5) {
-                            if(!needLeave) {
+                            if (!needLeave) {
                                 SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
                                         "连接指定wifi失败，正在重试"
                                 );
@@ -304,7 +314,7 @@ public class MainActivity extends AppCompatActivity {
                     if (timeOut) {
                         continue;
                     }
-                    if(wifiAdmin.currentConnectSSID().equals(ssid)) {
+                    if (wifiAdmin.currentConnectSSID().equals(ssid)) {
                         SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
                                 "连接wifi成功"
                         );
@@ -318,7 +328,7 @@ public class MainActivity extends AppCompatActivity {
                 }
                 timer.cancel();
                 //开锁
-                SendMessage(MsgValue.TELL_ME_SOME_INFOR,0,0,"client开锁");
+                SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0, "client开锁");
                 clientLocked = false;
             }
         }).start();
@@ -439,6 +449,10 @@ public class MainActivity extends AppCompatActivity {
 
         } else {
             //退出前的处理操作
+            //关闭AP
+            if (apHelper.isApEnabled()) {
+                apHelper.setWifiApEnabled(null, false);
+            }
             //执行退出操作,并释放资源
             finish();
             //Dalvik VM的本地方法完全退出app
@@ -503,5 +517,26 @@ public class MainActivity extends AppCompatActivity {
         }
         return true;
     }
+    /**
+     * 适配android6.0以上权限                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         =
+     */
+    private void requestPermission() {
+        /**
+         * 请求所有必要的权限
+         */
+        PermissionsManager.getInstance().requestAllManifestPermissionsIfNecessary(this, new PermissionsResultAction() {
+            @Override
+            public void onGranted() {
+                //1、获取IMEI的权限
+                //2、访问文件的权限
+                //3、(wifi扫描)需要的手机定位权限
+//				Toast.makeText(MainActivity.this, "All permissions have been granted", Toast.LENGTH_SHORT).show();
+            }
 
+            @Override
+            public void onDenied(String permission) {
+                //Toast.makeText(MainActivity.this, "Permission " + permission + " has been denied", Toast.LENGTH_SHORT).show();
+            }
+        });
+    }
 }

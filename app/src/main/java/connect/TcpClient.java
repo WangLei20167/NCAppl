@@ -20,6 +20,7 @@ import fileSlices.EncodeFile;
 import fileSlices.PieceFile;
 import msg.MsgValue;
 import utils.IntAndBytes;
+import utils.LocalInfor;
 import utils.MyFileUtils;
 
 /**
@@ -64,7 +65,7 @@ public class TcpClient {
                 socket.close();
                 socket = null;
             }
-            GlobalVar.g_ef = null;
+            //GlobalVar.g_ef = null;
             //socket = new Socket(Constant.TCP_ServerIP, Constant.TCP_ServerPORT);
 //            socket = new Socket();
 //            SocketAddress endpoint = new InetSocketAddress(Constant.TCP_ServerIP, Constant.TCP_ServerPORT);
@@ -72,6 +73,7 @@ public class TcpClient {
 //            socket.setReceiveBufferSize(1 * 1024 * 1024);
             //实现一个socket创建3秒延迟的作用
             long startTime = System.currentTimeMillis();
+            //去掉循环连接socket
             while (true) {
                 try {
                     socket = new Socket(Constant.TCP_ServerIP, Constant.TCP_ServerPORT);
@@ -80,7 +82,7 @@ public class TcpClient {
                 } catch (IOException e) {
                     e.printStackTrace();
                     long endTime = System.currentTimeMillis();
-                    if ((endTime - startTime) > 3000) {
+                    if ((endTime - startTime) > 1000) {
                         System.out.println("连接socket失败");
                         SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0, "连接ServerSocket失败");
                         return false;
@@ -271,7 +273,9 @@ public class TcpClient {
                         //在本地找信息
                         for (final PieceFile pieceFile : GlobalVar.g_ef.getPieceFileList()) {
                             if (pieceFile.getPieceNo() == partNo) {
-                                String reEncodeFilePath = pieceFile.getReencodeFile();
+                                String s = pieceFile.getReencodeFile();
+                                String[] split = s.split("#");
+                                String reEncodeFilePath = split[1];
                                 //发送给用户
                                 sendfile(reEncodeFilePath, true);
                                 break;
@@ -369,6 +373,8 @@ public class TcpClient {
                 e.printStackTrace();
             }
         } else {
+            SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
+                    "对方没有对我有用的数据");
             //离开标志
             ++leaveFlag;
             //
@@ -456,6 +462,11 @@ public class TcpClient {
                     if (GlobalVar.g_ef.recoveryFile()) {
                         SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
                                 GlobalVar.g_ef.getFileName() + "解码成功");
+                        String time = LocalInfor.getCurrentTime("yy-MM-dd HH:mm:ss");
+                        String fileName = GlobalVar.g_ef.getFileName();
+                        SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
+                                time + "  " + fileName + " " + "接收完成");
+                        MyFileUtils.writeLog(MyFileUtils.REV_TYPE, time, fileName);
                         //打开
                         //SendMessage(MsgValue.DECODE_SUCCESS_OPEN_FILE, 0, 0, filePath);
                     } else {
@@ -517,16 +528,31 @@ public class TcpClient {
                     if (GlobalVar.g_ef == null) {
 
                     } else {
-                        for (PieceFile pieceFile : GlobalVar.g_ef.getPieceFileList()) {
+                        int size = GlobalVar.g_ef.getPieceFileList().size();
+                        for (int i = 0; i < size; ++i) {
+                            final PieceFile pieceFile = GlobalVar.g_ef.getPieceFileList().get(i);
                             if (!pieceFile.isHaveSendFile()) {
                                 if (!pieceFile.isReencoding()) {
-                                    pieceFile.re_encodeFile();
+                                    //在这里重开一个子线程执行
+                                    new Thread(new Runnable() {
+                                        @Override
+                                        public void run() {
+                                            pieceFile.re_encodeFile();
+                                        }
+                                    }).start();
                                 }
                             }
                         }
+//                        for (PieceFile pieceFile : GlobalVar.g_ef.getPieceFileList()) {
+//                            if (!pieceFile.isHaveSendFile()) {
+//                                if (!pieceFile.isReencoding()) {
+//                                    pieceFile.re_encodeFile();
+//                                }
+//                            }
+//                        }
                     }
                     try {
-                        Thread.sleep(100);
+                        Thread.sleep(30);
                     } catch (InterruptedException e) {
                         e.printStackTrace();
                     }

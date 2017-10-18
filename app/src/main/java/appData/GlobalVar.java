@@ -24,6 +24,12 @@ public class GlobalVar {
     private static String TempPath;
     private static String CrashPath;
 
+    //用来记录文件的发送和接收情况
+    private static String LogPath;
+    public final static String sendLogName = "sendLog.txt";
+    public final static String revLogName = "revLog.txt";
+
+    private static String IMEI;
     private static String SSID_IMEI;
 
     //全局encodeFile变量
@@ -35,13 +41,16 @@ public class GlobalVar {
         TempPath = MyFileUtils.creatFolder(dataFolderPath, "Temp");  //创建文件暂存的目录
         FileRevPath = MyFileUtils.creatFolder(dataFolderPath, "FileRev");
         CrashPath = MyFileUtils.creatFolder(dataFolderPath, "Crash");
+        LogPath = MyFileUtils.creatFolder(dataFolderPath, "Log");
         //如果异常日志大于20M，则删除
         File folder = new File(CrashPath);
         int folderLen = (int) folder.length();
         if (folderLen > 20 * 1024 * 1024) {
             MyFileUtils.deleteAllFile(CrashPath, false);
         }
-        SSID_IMEI = Constant.SUB_SSID + LocalInfor.getDeviceID(context);
+        //设备IMEI码
+        IMEI = LocalInfor.getDeviceID(context);
+        SSID_IMEI = Constant.SUB_SSID + IMEI;
     }
 
     //以下是Getter和Setter方法
@@ -63,5 +72,12 @@ public class GlobalVar {
 
     public static String getSsidImei() {
         return SSID_IMEI;
+    }
+    public static String getLogPath() {
+        return LogPath;
+    }
+
+    public static String getIMEI() {
+        return IMEI;
     }
 }

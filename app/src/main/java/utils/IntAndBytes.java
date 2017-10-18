@@ -144,4 +144,27 @@ public class IntAndBytes {
         return newArray;
     }
 
+    /**
+     * 给原始数组增加一个长度，并将value赋给它
+     *
+     * @param origin
+     * @param value
+     * @return
+     */
+    public static int[] intArrayGrow(int[] origin, int value) {
+        //如果是空，则申请一个来存储
+        if (origin == null) {
+            origin = new int[1];
+            origin[0] = value;
+            return origin;
+        } else {
+            int length = origin.length;
+            int[] newIntArray = new int[length + 1];
+            //复制原数据
+            System.arraycopy(origin, 0, newIntArray, 0, length);
+            //添加新数据
+            newIntArray[length] = value;
+            return newIntArray;
+        }
+    }
 }

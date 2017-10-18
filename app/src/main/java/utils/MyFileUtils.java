@@ -17,6 +17,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.ArrayList;
 
+import appData.GlobalVar;
 import njupt.ncappl.FilesListViewActivity;
 
 /**
@@ -466,6 +467,68 @@ public class MyFileUtils {
     }
 
 
+    //写发送和接收日志
+    //把发送和接收完成的时间写入日志
+    public final static int SEND_TYPE = 0;
+    public final static int REV_TYPE = 1;
+
+    /**
+     * @param type     0代表是开始分享的发送时间，1代表是接受完成的时间
+     * @param fileName 分享的文件名
+     * @param time     分享的时间
+     */
+    public static void writeLog(int type, String time, String fileName) {
+        String filePath;
+        String description;
+        if (type == 0) {
+            filePath = GlobalVar.getLogPath() + File.separator + GlobalVar.sendLogName;
+            description = "开始分享";
+        } else {
+            filePath = GlobalVar.getLogPath() + File.separator + GlobalVar.revLogName;
+            description = "接收完成";
+        }
+        File file = new File(filePath);
+        if (!file.exists()) {
+            try {
+                file.createNewFile();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+
+        byte[] inputData = (time + "  " + fileName + " " + description + "\n\n").getBytes();
+        FileOutputStream fos = null;
+        BufferedOutputStream bos = null;
+
+        try {
+            //传递一个true参数，代表不覆盖已有的文件。并在已有文件的末尾处进行数据续写,false表示覆盖写
+            //FileWriter fw = new FileWriter(myFile, false);
+            //BufferedWriter bw = new BufferedWriter(fw);
+            //fos = new FileOutputStream(myFile);  //覆盖写
+            fos = new FileOutputStream(file, true);  //续写
+            bos = new BufferedOutputStream(fos);
+            bos.write(inputData);
+            //bw.write("测试文本");
+        } catch (IOException e) {
+            e.printStackTrace();
+        } finally {
+            if (bos != null) {
+                try {
+                    bos.flush();
+                    bos.close();
+                } catch (IOException e1) {
+                    e1.printStackTrace();
+                }
+            }
+            if (fos != null) {
+                try {
+                    fos.close();
+                } catch (IOException e1) {
+                    e1.printStackTrace();
+                }
+            }
+        }
+    }
     /**
      * 根据文件路径或是File对象打开文件
      *

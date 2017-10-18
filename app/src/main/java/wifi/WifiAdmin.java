@@ -113,7 +113,9 @@ public class WifiAdmin {
     }
 
     // 断开指定ID的网络
-    public void disconnectWifi(int netId) {
+    //断开当前的wifi连接
+    public void disconnectWifi() {
+        int netId = mWifiInfo.getNetworkId();
         mWifiManager.disableNetwork(netId);
         mWifiManager.disconnect();
     }
@@ -200,7 +202,7 @@ public class WifiAdmin {
             List<WifiConfiguration> existingConfigs = mWifiManager.getConfiguredNetworks();
             for (WifiConfiguration existingConfig : existingConfigs) {
                 String ssid = existingConfig.SSID;
-                if (existingConfig.SSID.contains(Constant.SUB_SSID)) {
+                if (existingConfig.SSID.contains(Constant.GENERAL_SUB_SSID)) {
                     mWifiManager.removeNetwork(existingConfig.networkId);
                 }
             }

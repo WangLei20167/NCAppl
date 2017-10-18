@@ -5,6 +5,8 @@ package connect;
  */
 
 public class Constant {
+    //3套方案都有的SSID子串
+    public final static String GENERAL_SUB_SSID = "Sharing";
     //ssid的格式是 NCSharing+手机唯一识别码
     public final static String SUB_SSID = "NCSharing";
     //定义AP密码

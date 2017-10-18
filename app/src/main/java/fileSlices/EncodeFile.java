@@ -20,6 +20,7 @@ import java.util.Arrays;
 import java.util.List;
 
 import appData.GlobalVar;
+import utils.IntAndBytes;
 import utils.LocalInfor;
 import utils.MyFileUtils;
 
@@ -51,6 +52,10 @@ public class EncodeFile {
     private int rightFileLen2 = 0;
     //文件夹名字
     private String folderName;
+
+    //文件源手机的串号
+    //标记哪个手机是文件源
+    private String IMEI;
     //文件片的信息
     @XStreamAlias("subfileInfor")
     private List<PieceFile> pieceFileList = new ArrayList<PieceFile>();
@@ -72,6 +77,7 @@ public class EncodeFile {
             this.folderName = folderName;
         }
         storagePath = MyFileUtils.creatFolder(GlobalVar.getTempPath(), this.folderName);
+        IMEI = GlobalVar.getIMEI();
     }
 
     //对文件进行分片 分成每10M一个部分，在送去编码
@@ -146,7 +152,7 @@ public class EncodeFile {
         new Thread(new Runnable() {
             @Override
             public void run() {
-                MyFileUtils.moveFile(originFile,storagePath,false);
+                MyFileUtils.moveFile(originFile, storagePath, false);
             }
         }).start();
     }
@@ -184,6 +190,7 @@ public class EncodeFile {
         //合并文件
         //String outFilePath = storagePath + File.separator + fileName;
         MyFileUtils.mergeFiles(outFilePath, files);
+        //在此删除恢复回来的部分文件
         return true;
     }
 
@@ -202,6 +209,7 @@ public class EncodeFile {
                         "rightFileLen1",
                         "rightFileLen2",
                         "folderName",
+                        "IMEI",
                         "pieceFileList",
                         "storagePath",
                         "xmlFileName"
@@ -316,32 +324,27 @@ public class EncodeFile {
         newEncodeFile.rightFileLen1 = encodeFile.rightFileLen1;
         newEncodeFile.rightFileLen2 = encodeFile.rightFileLen2;
         newEncodeFile.folderName = encodeFile.folderName;
+        newEncodeFile.IMEI = encodeFile.IMEI;   //文件源的标记
         newEncodeFile.object2xml();    //把配置信息写入文件
         return newEncodeFile;
     }
 
     //找出有用的部分 进行请求
     //让它返回数组
-    //pieceNo-1 位置，需要则true，不需要则false
+    //返回一个数组   存有partNo 部分文件的编号
     public int[] findUsefulParts(EncodeFile itsEncodeFile) {
         int[] usefulParts = null;
+        List<PieceFile> itsPieceFileList = itsEncodeFile.getPieceFileList();
         //如果本地没有任何数据
         if (pieceFileList.size() == 0) {
-            //String strAll = "";
-//            for (int i = 0; i < TotalParts; ++i) {
-//                //strAll += ((i + 1) + ",");
-//                usefulParts[i] = i + 1;
-//            }
-            //return strAll;
-            usefulParts = new int[TotalParts];
-            for (int i = 0; i < TotalParts; ++i) {
-                usefulParts[i] = (i + 1);
+            int partNum = itsPieceFileList.size();
+            for (int i = 0; i < partNum; ++i) {
+                PieceFile pieceFile = itsPieceFileList.get(i);
+                int pieceNo = pieceFile.getPieceNo();
+                usefulParts = IntAndBytes.intArrayGrow(usefulParts, pieceNo);
             }
             return usefulParts;
         }
-        //String usefulParts = "";
-        //int iFlag = 0;
-        List<PieceFile> itsPieceFileList = itsEncodeFile.getPieceFileList();
         for (PieceFile itsPieceFile : itsPieceFileList) {
             int itsPieceNo = itsPieceFile.getPieceNo();
             boolean haveThisPart = false;
@@ -351,16 +354,7 @@ public class EncodeFile {
                     //判断对方的数据是否对自己有用
                     //usefulParts[flag] = myPieceFile.usefulOrNot(itsPieceFile.getCoeffMatrix());
                     if (myPieceFile.usefulOrNot(itsPieceFile.getCoeffMatrix())) {
-                        if (usefulParts == null) {
-                            usefulParts = new int[1];
-                            usefulParts[0] = itsPieceNo;
-                        } else {
-                            int len = usefulParts.length;
-                            int[] newArray = new int[len + 1];
-                            System.arraycopy(usefulParts, 0, newArray, 0, len);
-                            newArray[len] = itsPieceNo;
-                            usefulParts = newArray;
-                        }
+                        usefulParts = IntAndBytes.intArrayGrow(usefulParts, itsPieceNo);
                     }
                     haveThisPart = true;
                     break;
@@ -368,28 +362,14 @@ public class EncodeFile {
             }
             //没有这部分数据
             if (!haveThisPart) {
-                if (usefulParts == null) {
-                    usefulParts = new int[1];
-                    usefulParts[0] = itsPieceNo;
-                } else {
-                    int len = usefulParts.length;
-                    int[] newArray = new int[len + 1];
-                    System.arraycopy(usefulParts, 0, newArray, 0, len);
-                    newArray[len] = itsPieceNo;
-                    usefulParts = newArray;
-                }
-                //usefulParts += (itsPieceNo + ",");
+                usefulParts = IntAndBytes.intArrayGrow(usefulParts, itsPieceNo);
             }
         }
-        //证明对方没有对自己有用的数据
-//        if (usefulParts.equals("")) {
-//            usefulParts = "-1，";
-//        }
-
         return usefulParts;
     }
 
     //统计一共有多少有用的文件
+    //暂时没用此方法
     public int calculateUsefulFileNum(EncodeFile itsEncodeFile) {
         //如果本地没有任何数据
         if (currentSmallPiece == 0) {
@@ -426,7 +406,16 @@ public class EncodeFile {
         }
         currentSmallPiece = count;
     }
+    //判断此设备是不是数据源
+    public boolean isDataSource() {
+        //根据IMEI进行判断
+        if (IMEI.equals(GlobalVar.getIMEI())) {
+            return true;
+        } else {
+            return false;
+        }
 
+    }
 
     /**
      * 以下是自动生成的Getter和Setter方法

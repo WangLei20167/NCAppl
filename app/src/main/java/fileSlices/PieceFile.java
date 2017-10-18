@@ -106,6 +106,7 @@ public class PieceFile {
     }
 
     //查看对方有多少个文件对自己有用
+    //暂时没用到此方法
     public int getUserfulFileNum(int[][] itsCoeffMatrix) {
         int myRow = coeffMatrix.length;
         int itsRow = itsCoeffMatrix.length;
@@ -202,19 +203,27 @@ public class PieceFile {
     //获取再编码文件
     public synchronized String getReencodeFile() {
         while (!haveSendFile) {
-            System.out.println("获取文件时,haveSendFile为false," + "正在循环等待再编码文件");
-            try {
-                Thread.sleep(100);
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
+            //System.out.println("获取文件时,haveSendFile为false," + "正在循环等待再编码文件");
+//            try {
+//                Thread.sleep(100);
+//            } catch (InterruptedException e) {
+//                e.printStackTrace();
+//            }
         }
+        long startTime = System.currentTimeMillis();
         ArrayList<File> fileArrayList = MyFileUtils.getList_1_files(re_encodeFilePath);
         File file = fileArrayList.get(0);
         System.out.println("已获取到再编码文件,正在剪切");
         File transferFile = MyFileUtils.moveFile(file, sendBufferPath, true);
+        long endTime = System.currentTimeMillis();
+        long delay = endTime - startTime;
+        System.out.println("PieceFile类中的再编码文件剪切粘贴的时间" + (endTime - startTime));
+
         haveSendFile = false;
-        return transferFile.getPath();
+        //把剪切复制文件的时间（ms） 也返回
+        return delay + "#" + transferFile.getPath();
+        // return file.getPath();
+
 //        ArrayList<File> files = MyFileUtils.getListFiles(re_encodeFilePath);
 //        int size = files.size();
 //        if (size == 0) {
