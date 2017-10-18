@@ -19,21 +19,21 @@ public class NCUtils {
 ////    }
     //为了避免两个线程同时进入jni操作，这里需要引入锁 信号量机制
     //这里的jni编解码只支持单线程
-    public final static Semaphore NC_SEMAPHORE = new Semaphore(1);
+    //public final static Semaphore NC_SEMAPHORE = new Semaphore(1);
 
-    //申请使用nc
-    public static void nc_acquire() {
-        try {
-            NC_SEMAPHORE.acquire();
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
-    }
-
-    //使用完毕释放掉
-    public static void nc_release() {
-        NC_SEMAPHORE.release();
-    }
+//    //申请使用nc
+//    public static void nc_acquire() {
+//        try {
+//            NC_SEMAPHORE.acquire();
+//        } catch (InterruptedException e) {
+//            e.printStackTrace();
+//        }
+//    }
+//
+//    //使用完毕释放掉
+//    public static void nc_release() {
+//        NC_SEMAPHORE.release();
+//    }
 
     //在此封装编码，再编码，解码
     //在此只生成一个再编码数据
@@ -97,9 +97,13 @@ public class NCUtils {
      * which is packaged with this application.
      */
     //初始化有限域
-    //public static native void InitGalois();
+    //app运行时就应该调用
+    public static native void InitGalois();
 
-    //public static native void UninitGalois();
+    //app退出时调用
+    //释放jni申请的空间
+    public static native void UninitGalois();
+
     public static native byte[] Multiply(byte[] matrix1, int row1, int col1, byte[] matrix2, int row2, int col2);
 
     public static native byte[] InverseMatrix(byte[] arrayData, int nK);

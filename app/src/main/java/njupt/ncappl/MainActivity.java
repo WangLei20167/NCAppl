@@ -33,6 +33,7 @@ import java.util.Timer;
 import java.util.TimerTask;
 
 import appData.GlobalVar;
+import nc.NCUtils;
 import runtimepermissions.PermissionsManager;
 import runtimepermissions.PermissionsResultAction;
 import wifi.APHelper;
@@ -56,7 +57,6 @@ public class MainActivity extends AppCompatActivity {
     Timer timer;
     volatile boolean needLeave;
 
-
     //对打开文件选择器时 显示的路径进行控制
     private String startPath;
     //编码数据
@@ -75,7 +75,9 @@ public class MainActivity extends AppCompatActivity {
         //
         requestPermission();
         //初始化全局变量   文件存放地址
-         GlobalVar.initial(this);
+        GlobalVar.initial(this);
+        //初始化有限域
+        NCUtils.InitGalois();
         //全局抓取异常   世界警察
         AECrashHelper.initCrashHandler(getApplication(),
                 new AECHConfiguration.Builder()
@@ -275,7 +277,7 @@ public class MainActivity extends AppCompatActivity {
                         continue;
                     }
                     //如果当前wifi是连接状态，则断开当前连接
-                    if(wifiAdmin.isWifiConnected()){
+                    if (wifiAdmin.isWifiConnected()) {
                         wifiAdmin.disconnectWifi();
                     }
                     //连接网络的操作
@@ -449,6 +451,16 @@ public class MainActivity extends AppCompatActivity {
 
         } else {
             //退出前的处理操作
+            //关闭
+            tcpSvr.closeServer();
+            tcpClient.closeSocket();
+            //释放有限域
+            try {
+                NCUtils.UninitGalois();
+            } catch (Throwable e) {
+                //可catch的最大类
+                e.printStackTrace();
+            }
             //关闭AP
             if (apHelper.isApEnabled()) {
                 apHelper.setWifiApEnabled(null, false);
@@ -517,6 +529,7 @@ public class MainActivity extends AppCompatActivity {
         }
         return true;
     }
+
     /**
      * 适配android6.0以上权限                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         =
      */

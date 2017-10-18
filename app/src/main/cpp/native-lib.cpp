@@ -1,25 +1,74 @@
 #include <jni.h>
 #include <string>
-#include "gf.c"
+//#include "gf.c"
+//return NULL 时，用到了string库？？？
+//把有限域上的库直接整合在这里
+//不再使用 gf.c
+//有限域上的加减乘法指数运算宏
+#define  gf_add(a, b)    (a^b)
+#define  gf_sub(a, b)    (a^b)
+
+#define  gf_mul(a, b)    (table_mul[a][b])
+#define  gf_div(a, b)    (table_div[a][b])
+
+typedef unsigned int GFType;
+//有限域
+int gFieldSize;
+//
+//乘法表和除法表
+GFType *table_alpha;
+GFType *table_index;
+GFType **table_mul;
+GFType **table_div;
+//有限域表
+GFType prim_poly[13] =
+        {
+/*	0 */    0x00000000,
+/*  1 */    0x00000001,
+/*  2 */    0x00000007,
+/*  3 */    0x0000000b,
+/*  4 */    0x00000013,
+/*  5 */    0x00000025,
+/*  6 */    0x00000043,
+/*  7 */    0x00000089,
+/*  8 */    0x00000187,
+/*  9 */    0x00000211,
+/* 10 */    0x00000409,
+/* 11 */    0x00000805,
+/* 12 */    0x00001053,
+        };
 
 extern "C" {
+//乘法
+GFType gfmul(GFType a, GFType b);
+//除法
+GFType gfdiv(GFType a, GFType b);
+//指数
+GFType gf_exp(GFType a, GFType n);
 //初始化有限域
+void gf_init(unsigned int m, unsigned int prim);
+//释放有限域
+void gf_uninit();
+
+//1、初始化有限域
 JNIEXPORT void JNICALL
         Java_nc_NCUtils_InitGalois(JNIEnv *env, jobject instance);
-//释放有限域
+//2、释放有限域
 JNIEXPORT void JNICALL
         Java_nc_NCUtils_UninitGalois(JNIEnv *env, jobject instance);
-//矩阵相乘
+
+//3、矩阵相乘
 JNIEXPORT jbyteArray JNICALL
         Java_nc_NCUtils_Multiply(JNIEnv *env, jobject instance,
                                  jbyteArray matrix1, jint row1, jint col1,
                                  jbyteArray matrix2, jint row2, jint col2);
-//矩阵求逆
+
+//4、矩阵求逆
 //先是用到了求矩阵的秩，满秩则继续求逆，不满秩则返回NULL
 JNIEXPORT jbyteArray JNICALL
         Java_nc_NCUtils_InverseMatrix(JNIEnv *env, jobject thiz,
                                       jbyteArray arrayData, jint nK);
-//求秩
+//5、求秩
 JNIEXPORT jint JNICALL
         Java_nc_NCUtils_getRank(JNIEnv *env, jobject instance, jbyteArray matrix, jint nRow,
                                 jint nCol);
@@ -46,6 +95,7 @@ JNIEXPORT jbyteArray JNICALL
 Java_nc_NCUtils_Multiply(JNIEnv *env, jobject instance,
                          jbyteArray matrix1, jint row1, jint col1,
                          jbyteArray matrix2, jint row2, jint col2) {
+    //gs_jvm->AttachCurrentThread(&env, NULL);
     //矩阵1
     jbyte *olddata1 = (jbyte *) env->GetByteArrayElements(matrix1, 0);
     jsize oldsize1 = env->GetArrayLength(matrix1);
@@ -58,7 +108,7 @@ Java_nc_NCUtils_Multiply(JNIEnv *env, jobject instance,
 
     // unsigned char pResult[row1 * col2];
     unsigned char *pResult = new unsigned char[row1 * col2];
-    gf_init(8, 0x00000187);
+    //gf_init(8, 0x00000187);
     //相乘
     unsigned char temp = 0;
     for (int i = 0; i < row1; ++i) {
@@ -70,7 +120,7 @@ Java_nc_NCUtils_Multiply(JNIEnv *env, jobject instance,
             pResult[i * col2 + j] = temp;
         }
     }
-    gf_uninit();
+    //gf_uninit();
     //转化数组
     jsize myLen = row1 * col2;
     jbyteArray jarrResult = env->NewByteArray(myLen);
@@ -80,6 +130,8 @@ Java_nc_NCUtils_Multiply(JNIEnv *env, jobject instance,
     delete[] pResult;
     env->ReleaseByteArrayElements(matrix1, olddata1, 0);
     env->ReleaseByteArrayElements(matrix2, olddata2, 0);
+
+    //gs_jvm->DetachCurrentThread(); //使用完成后
     return jarrResult;
 }
 
@@ -101,7 +153,7 @@ Java_nc_NCUtils_InverseMatrix(JNIEnv *env, jobject thiz,
     int k = nK;
     int nCol = nK;
     //初始化有限域
-    gf_init(8, 0x00000187);
+    //gf_init(8, 0x00000187);
     //unsigned int M[k][k];
     unsigned int **M = new unsigned int *[k];
     for (int i = 0; i < k; ++i) {
@@ -183,7 +235,7 @@ Java_nc_NCUtils_InverseMatrix(JNIEnv *env, jobject thiz,
         }
     }
     //清空有限域
-    gf_uninit();
+    //gf_uninit();
 
     jbyteArray jarrRV = env->NewByteArray(k * k);
     jsize myLen = k * k;
@@ -210,7 +262,7 @@ Java_nc_NCUtils_getRank(JNIEnv *env, jobject instance, jbyteArray matrix, jint n
     jsize oldsize = env->GetArrayLength(matrix);
     unsigned char *pData = (unsigned char *) olddata;
     //初始化有限域
-    gf_init(8, 0x00000187);
+    //gf_init(8, 0x00000187);
 
     //
     //  unsigned int M[nRow][nCol];  这种写法会造成多线程时出错
@@ -298,7 +350,7 @@ Java_nc_NCUtils_getRank(JNIEnv *env, jobject instance, jbyteArray matrix, jint n
         }
     }
     //清空内存
-    gf_uninit();
+    //gf_uninit();
     //释放内存
     for (int i = 0; i < nRow; ++i) {
         delete[] M[i];
@@ -309,4 +361,92 @@ Java_nc_NCUtils_getRank(JNIEnv *env, jobject instance, jbyteArray matrix, jint n
 }
 
 
+//初始化有限域
+void gf_init(unsigned int m, unsigned int prim)// GF(2^m), primitive polymonial
+{
+    int i = 0, j = 0;
+
+    if (m > 12)    // the field size is supported from GF(2^1) to GF(2^12).
+        return;
+
+    gFieldSize = 1 << m;
+
+    if (0 == prim)
+        prim = prim_poly[m];
+
+
+    table_alpha = (GFType *) malloc(sizeof(GFType) * gFieldSize);
+    table_index = (GFType *) malloc(sizeof(GFType) * gFieldSize);
+    table_mul = (GFType **) malloc(sizeof(GFType *) * gFieldSize);
+    table_div = (GFType **) malloc(sizeof(GFType *) * gFieldSize);
+    for (i = 0; i < gFieldSize; i++) {
+        table_mul[i] = (GFType *) malloc(sizeof(GFType) * gFieldSize);
+        table_div[i] = (GFType *) malloc(sizeof(GFType) * gFieldSize);
+    }
+
+
+    table_alpha[0] = 1;
+    table_index[0] = -1;
+
+    for (i = 1; i < gFieldSize; i++) {
+        table_alpha[i] = table_alpha[i - 1] << 1;
+        if (table_alpha[i] >= gFieldSize) {
+            table_alpha[i] ^= prim;
+        }
+
+        table_index[table_alpha[i]] = i;
+    }
+
+    table_index[1] = 0;
+
+    // create the tables of mul and div
+    for (i = 0; i < gFieldSize; i++)
+        for (j = 0; j < gFieldSize; j++) {
+            table_mul[i][j] = gfmul(i, j);
+            table_div[i][j] = gfdiv(i, j);
+
+        }
+}
+
+//释放有限域
+void gf_uninit() {
+    int i = 0;
+
+    free(table_alpha);
+    free(table_index);
+
+    for (i = 0; i < gFieldSize; i++) {
+        free(table_mul[i]);
+        free(table_div[i]);
+    }
+    free(table_mul);
+    free(table_div);
+}
+
+//乘法
+GFType gfmul(GFType a, GFType b) {
+    if (0 == a || 0 == b)
+        return 0;
+
+    return table_alpha[(table_index[a] + table_index[b]) % (gFieldSize - 1)];
+}
+
+//除法
+GFType gfdiv(GFType a, GFType b) {
+    if (0 == a || 0 == b)
+        return 0;
+
+    return table_alpha[(table_index[a] - table_index[b] + (gFieldSize - 1)) % (gFieldSize - 1)];
+}
+
+//指数
+GFType gf_exp(GFType a, GFType n) {
+    if (a == 0 && n == 0) {
+        return 1;
+    }
+    if (a == 0 && n != 0) {
+        return 0;
+    }
+    return table_alpha[table_index[a] * n % (gFieldSize - 1)];
+}
 

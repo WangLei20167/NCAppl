@@ -95,9 +95,9 @@ public class PieceFile {
             //拼接在最后一行
             System.arraycopy(itsCoeffMatrix[i], 0, testMatrix[row], 0, nK);
             //计算拼接之后的秩
-            NCUtils.nc_acquire();
+            //NCUtils.nc_acquire();
             int nRank = NCUtils.getRank(IntAndBytes.int2Array_byte1Array(testMatrix), row + 1, nK);
-            NCUtils.nc_release();
+            //NCUtils.nc_release();
             if (nRank == (myRank + 1)) {
                 return true;
             }
@@ -116,9 +116,9 @@ public class PieceFile {
         System.arraycopy(coeffMatrix, 0, testMatrix, 0, myRow);
         System.arraycopy(itsCoeffMatrix, 0, testMatrix, myRow, itsRow);
         byte[] byteArray = IntAndBytes.int2Array_byte1Array(testMatrix);
-        NCUtils.nc_acquire();
+        //NCUtils.nc_acquire();
         int rank = NCUtils.getRank(byteArray, totalRow, nK);
-        NCUtils.nc_release();
+        //NCUtils.nc_release();
         int usefulFileNum = rank - myRow;
         return usefulFileNum;
     }
@@ -166,9 +166,9 @@ public class PieceFile {
             System.arraycopy(bt_coefM, 0, testCoeff, 0, row);
             System.arraycopy(coeff[0], 0, testCoeff[row], 0, nK);
             //计算秩
-            NCUtils.nc_acquire();
+            //NCUtils.nc_acquire();
             int rank = NCUtils.getRank(IntAndBytes.byte2Array_byte1Array(testCoeff), row + 1, nK);
-            NCUtils.nc_release();
+            //NCUtils.nc_release();
             if (rank == nRank) {
                 //证明数据没用
                 file.delete();
@@ -345,9 +345,9 @@ public class PieceFile {
             }
         }
         //存再编码结果
-        NCUtils.nc_acquire();
+        //NCUtils.nc_acquire();
         byte[] reEncodeData = NCUtils.reencode(fileData, fileNum, fileLen);
-        NCUtils.nc_release();
+        //NCUtils.nc_release();
         MyFileUtils.deleteAllFile(re_encodeFilePath, false);
         String fileName = pieceNo + "." + LocalInfor.getCurrentTime("MMddHHmmssSSS") + ".nc"; //pieceNo.time.re  //格式
         File re_encodeFile = MyFileUtils.writeToFile(re_encodeFilePath, fileName, reEncodeData);
@@ -386,9 +386,9 @@ public class PieceFile {
             }
         }
         //int col = fileLen - 1 - nK;
-        NCUtils.nc_acquire();
+        //NCUtils.nc_acquire();
         byte[] origin_data = NCUtils.decode(fileData, nK, fileLen);
-        NCUtils.nc_release();
+        //NCUtils.nc_release();
         if (origin_data == null) {
             return false;
         }
