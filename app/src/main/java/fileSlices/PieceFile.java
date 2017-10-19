@@ -55,9 +55,11 @@ public class PieceFile {
     //监听此位   如果是false，则重新生成再编码文件
     @XStreamOmitField
     private volatile boolean haveSendFile = true;
+    //待发送的文件地址
+    // private volatile String sendFilePath;
 
-//    @XStreamOmitField
-//    private volatile String sendFilePath = null;
+    @XStreamOmitField
+    private volatile String sendFilePath = null;
 
     public PieceFile(String path, int pieceNo, int nK, int rightFileLen) {
         this.pieceNo = pieceNo;
