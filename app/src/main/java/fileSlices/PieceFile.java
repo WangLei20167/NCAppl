@@ -53,12 +53,12 @@ public class PieceFile {
     //当把准备把文件发送给一个用户时
     //把此位置位false
     //监听此位   如果是false，则重新生成再编码文件
-    @XStreamOmitField
-    private volatile boolean haveSendFile = true;
+    //@XStreamOmitField
+    private volatile boolean haveSendFile = false;
     //待发送的文件地址
     // private volatile String sendFilePath;
 
-    @XStreamOmitField
+    //@XStreamOmitField
     private volatile String sendFilePath = null;
 
     public PieceFile(String path, int pieceNo, int nK, int rightFileLen) {
@@ -212,18 +212,27 @@ public class PieceFile {
 //                e.printStackTrace();
 //            }
         }
-        long startTime = System.currentTimeMillis();
-        ArrayList<File> fileArrayList = MyFileUtils.getList_1_files(re_encodeFilePath);
-        File file = fileArrayList.get(0);
-        System.out.println("已获取到再编码文件,正在剪切");
-        File transferFile = MyFileUtils.moveFile(file, sendBufferPath, true);
-        long endTime = System.currentTimeMillis();
-        long delay = endTime - startTime;
-        System.out.println("PieceFile类中的再编码文件剪切粘贴的时间" + (endTime - startTime));
+//        long startTime = System.currentTimeMillis();
+//        ArrayList<File> fileArrayList = MyFileUtils.getList_1_files(re_encodeFilePath);
+//        File file = fileArrayList.get(0);
+//        System.out.println("已获取到再编码文件,正在剪切");
+//        File transferFile = MyFileUtils.moveFile(file, sendBufferPath, true);
+//        long endTime = System.currentTimeMillis();
+//        long delay = endTime - startTime;
+//        System.out.println("PieceFile类中的再编码文件剪切粘贴的时间" + (endTime - startTime));
+        String filePath = null;
+        //取走文件
+        if (sendFilePath != null) {
+            filePath = sendFilePath;
+            sendFilePath = null;
+        } else {
+            //
+            System.out.println("(PieceFile)haveSendFile和sendFilePath两个变量同步出错");
+        }
 
         haveSendFile = false;
         //把剪切复制文件的时间（ms） 也返回
-        return delay + "#" + transferFile.getPath();
+        return filePath;
         // return file.getPath();
 
 //        ArrayList<File> files = MyFileUtils.getListFiles(re_encodeFilePath);
@@ -314,15 +323,22 @@ public class PieceFile {
     //需要在一个独立线程中运行
     //因为会分配较大内存，所以规定每次之后一个可以进入
     //返回再编码文件的路径
-    public String re_encodeFile() {
-        System.out.println(pieceNo + "正在进行再编码");
+    public synchronized String re_encodeFile() {
+//        if (isReencoding) {
+//            return null;
+//        }
         isReencoding = true;
         //从编码文件路径中取出文件
         List<File> fileList = getRightLenFileList();
         if (fileList == null) {
             //检查长度时出错
-            //   return null;
+            return null;
         }
+        if (fileList.size() == 0) {
+            return null;
+        }
+        System.out.println("("+LocalInfor.getCurrentTime("HH:mm:ss:SSS")+")"+
+                pieceNo + "部分文件在执行再编码");
         int fileNum = fileList.size();
         //如果只有一个编码文件的话，那就不用再编码
         if (fileNum == 1) {
@@ -346,16 +362,17 @@ public class PieceFile {
                 //  return null;
             }
         }
-        //存再编码结果
-        //NCUtils.nc_acquire();
+        //再编码
         byte[] reEncodeData = NCUtils.reencode(fileData, fileNum, fileLen);
-        //NCUtils.nc_release();
-        MyFileUtils.deleteAllFile(re_encodeFilePath, false);
+
         String fileName = pieceNo + "." + LocalInfor.getCurrentTime("MMddHHmmssSSS") + ".nc"; //pieceNo.time.re  //格式
         File re_encodeFile = MyFileUtils.writeToFile(re_encodeFilePath, fileName, reEncodeData);
-        isReencoding = false;
+        sendFilePath = re_encodeFile.getPath();
         haveSendFile = true;
-        System.out.println(pieceNo + "再编码完成，已返回文件路径");
+        isReencoding = false;
+        //
+        System.out.println("("+LocalInfor.getCurrentTime("HH:mm:ss:SSS")+")"+
+                pieceNo + "再编码完成");
         return re_encodeFile.getPath();
     }
 
@@ -526,5 +543,13 @@ public class PieceFile {
 
     public void setSendBufferPath(String sendBufferPath) {
         this.sendBufferPath = sendBufferPath;
+    }
+
+    public String getSendFilePath() {
+        return sendFilePath;
+    }
+
+    public void setSendFilePath(String sendFilePath) {
+        this.sendFilePath = sendFilePath;
     }
 }

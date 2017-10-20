@@ -207,6 +207,18 @@ public class MainActivity extends AppCompatActivity {
                     serverLocked = false;
                     SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0, "server开锁");
                     return;
+                } else {
+                    int currentSmallPieceNum = GlobalVar.g_ef.getCurrentSmallPiece();
+                    if (currentSmallPieceNum < 1) {
+                        SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0, "GlobalVar.g_ef变量为null");
+                        //指令更为开启client状态
+                        if (auto) {
+                            openClient();
+                        }
+                        serverLocked = false;
+                        SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0, "server开锁");
+                        return;
+                    }
                 }
                 if (apHelper.setWifiApEnabled(APHelper.createWifiCfg(), true)) {
                     SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0, "AP打开成功");

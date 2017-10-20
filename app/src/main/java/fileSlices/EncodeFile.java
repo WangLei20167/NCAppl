@@ -191,11 +191,15 @@ public class EncodeFile {
         //String outFilePath = storagePath + File.separator + fileName;
         MyFileUtils.mergeFiles(outFilePath, files);
         //在此删除恢复回来的部分文件
+        for (int i = 0; i < files.length; ++i) {
+            File file = files[i];
+            file.delete();
+        }
         return true;
     }
 
     //把对象保存在xml文件中
-    public void object2xml() {
+    public synchronized void object2xml() {
         //设置xml字段顺序
         SortableFieldKeySorter sorter = new SortableFieldKeySorter();
         sorter.registerFieldOrder(EncodeFile.class,
@@ -220,12 +224,13 @@ public class EncodeFile {
                         "currentFileNum",
                         "nK",
                         "rightFileLen",
+                        "haveSendFile",
+                        "sendFilePath",
                         "coeffMatrix",
                         "pieceFilePath",
                         "encodeFilePath",
                         "re_encodeFilePath",
                         "isReencoding",
-                        "haveSendFile",
                         "sendBufferPath"
                 });
         //XStream xStream = new XStream(new DomDriver("UTF-8"));
@@ -293,12 +298,12 @@ public class EncodeFile {
                 String sendBufferPath = pieceFilePath + File.separator + "sendBuffer";
                 pieceFile.setSendBufferPath(sendBufferPath);
                 //查看是否有再编码文件
-                ArrayList<File> files = MyFileUtils.getList_1_files(pieceFile.getRe_encodeFilePath());
-                if (files.size() == 1) {
-                    pieceFile.setHaveSendFile(true);
-                } else {
-                    pieceFile.setHaveSendFile(false);
-                }
+//                ArrayList<File> files = MyFileUtils.getList_1_files(pieceFile.getRe_encodeFilePath());
+//                if (files.size() == 1) {
+//                    pieceFile.setHaveSendFile(true);
+//                } else {
+//                    pieceFile.setHaveSendFile(false);
+//                }
             }
         }
         return encodeFile;
@@ -406,6 +411,7 @@ public class EncodeFile {
         }
         currentSmallPiece = count;
     }
+
     //判断此设备是不是数据源
     public boolean isDataSource() {
         //根据IMEI进行判断

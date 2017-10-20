@@ -84,10 +84,6 @@ public class TcpServer {
                 try {
                     svrSock = new ServerSocket(Constant.TCP_ServerPORT);
                     svrSock.setReuseAddress(true);   //设置上一个关闭的超时状态下可连接
-//            InetSocketAddress endpoint = new InetSocketAddress(Constant.TCP_ServerIP, Constant.TCP_ServerPORT);
-//            svrSock = new ServerSocket();
-//            svrSock.setReceiveBufferSize(1 * 1024 * 1024);
-//            svrSock.bind(endpoint);
                 } catch (IOException e) {
                     //失败
                     System.out.println("绑定端口失败");
@@ -129,9 +125,6 @@ public class TcpServer {
                         e.printStackTrace();
                         break;
                     }
-//                    catch (NullPointerException e){
-//                        e.printStackTrace();
-//                    }
                     String client_ip = client.getInetAddress().toString();
                     for (int i = 0; i < socketList.size(); ++i) {
                         Socket s = socketList.get(i);
@@ -146,8 +139,13 @@ public class TcpServer {
                                 //循环执行后，出现的未知异常
                                 e.printStackTrace();
                             }
-                            break;
+                            continue;
                         }
+                        //删除无效socket
+                        if(!s.isConnected()){
+                            socketList.remove(i);
+                        }
+
                     }
 
                     socketList.add(client);
@@ -492,26 +490,27 @@ public class TcpServer {
                             for (final PieceFile pieceFile : GlobalVar.g_ef.getPieceFileList()) {
                                 if (pieceFile.getPieceNo() == partNo) {
                                     //打印信息
-                                    System.out.println("正在获取" + partNo + "部分再编码文件");
+                                    System.out.println("("+LocalInfor.getCurrentTime("HH:mm:ss:SSS")+")"+
+                                            "正在获取" + partNo + "部分再编码文件");
 //                                    while (!pieceFile.isHaveSendFile()) {
 //                                        System.out.println("获取文件时,haveSendFile为false," + "正在循环等待再编码文件");
 //                                    }
 
                                     //String reEncodeFilePath = pieceFile.getReencodeFile();
-                                    String s = pieceFile.getReencodeFile();
-                                    String[] split = s.split("#");
-                                    long delay0 = Integer.parseInt(split[0]);
-                                    String reEncodeFilePath = split[1];
-
+                                    //String s = pieceFile.getReencodeFile();
+                                    //String[] split = s.split("#");
+                                    //long delay0 = Integer.parseInt(split[0]);
+                                    String reEncodeFilePath = pieceFile.getReencodeFile();
                                     if (first) {
                                         long endTime = System.currentTimeMillis();
-                                        serverDelay = endTime - startTime - delay0;
+                                        serverDelay = endTime - startTime;
                                         SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
                                                 client_ip + "文件获取时延为" + serverDelay + " ms");
                                         first = false;
                                     }
                                     //发送给用户
-                                    System.out.println("获取到再编码文件" + reEncodeFilePath);
+                                    System.out.println("("+LocalInfor.getCurrentTime("HH:mm:ss:SSS")+")"+
+                                            "获取到再编码文件" + reEncodeFilePath);
                                     sendFiles(reEncodeFilePath, true);
                                     //发送完后，再重新编码文件
                                     //此位置位false，当检测到时，启动再编码
@@ -744,6 +743,21 @@ public class TcpServer {
                     //清空发送缓存中没来得及删除的文件
                     for (PieceFile pieceFile : GlobalVar.g_ef.getPieceFileList()) {
                         MyFileUtils.deleteAllFile(pieceFile.getSendBufferPath(), false);
+                        //
+                        String sendFilePath = pieceFile.getSendFilePath();
+                        ArrayList<File> files = MyFileUtils.getList_1_files(pieceFile.getRe_encodeFilePath());
+                        for (File file : files) {
+                            //如果记录中有可供发送的文件
+                            if (pieceFile.isHaveSendFile()) {
+                                //
+                                String filePath = file.getPath();
+                                if (!(filePath.equals(sendFilePath))) {
+                                    file.delete();
+                                }
+                            } else {
+                                file.delete();
+                            }
+                        }
                     }
                 }
                 while (reencodeFlag) {
@@ -754,23 +768,29 @@ public class TcpServer {
                         for (int i = 0; i < size; ++i) {
                             final PieceFile pieceFile = GlobalVar.g_ef.getPieceFileList().get(i);
                             if (!pieceFile.isHaveSendFile()) {
-                                if (!pieceFile.isReencoding()) {
+                                boolean isReencoding = pieceFile.isReencoding();
+                                if (!isReencoding) {
                                     //在这里重开一个子线程执行
+//                                    pieceFile.re_encodeFile();
+//                                    //更改xml文件
+//                                    GlobalVar.g_ef.object2xml();
                                     new Thread(new Runnable() {
                                         @Override
                                         public void run() {
                                             pieceFile.re_encodeFile();
+                                            //更改xml文件
+                                            GlobalVar.g_ef.object2xml();
                                         }
                                     }).start();
                                 }
                             }
                         }
                     }
-                    try {
-                        Thread.sleep(30);
-                    } catch (InterruptedException e) {
-                        e.printStackTrace();
-                    }
+//                    try {
+//                        Thread.sleep(30);
+//                    } catch (InterruptedException e) {
+//                        e.printStackTrace();
+//                    }
                 }
             }
         }).start();

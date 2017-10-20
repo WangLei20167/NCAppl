@@ -64,6 +64,10 @@ public class TcpClient {
             if (socket != null) {
                 socket.close();
                 socket = null;
+                if (dos != null) {
+                    dos_Semaphore.release();
+                    dos = null;
+                }
             }
             //GlobalVar.g_ef = null;
             //socket = new Socket(Constant.TCP_ServerIP, Constant.TCP_ServerPORT);
@@ -273,9 +277,9 @@ public class TcpClient {
                         //在本地找信息
                         for (final PieceFile pieceFile : GlobalVar.g_ef.getPieceFileList()) {
                             if (pieceFile.getPieceNo() == partNo) {
-                                String s = pieceFile.getReencodeFile();
-                                String[] split = s.split("#");
-                                String reEncodeFilePath = split[1];
+                                //String s = pieceFile.getReencodeFile();
+                                //String[] split = s.split("#");
+                                String reEncodeFilePath = pieceFile.getReencodeFile();
                                 //发送给用户
                                 sendfile(reEncodeFilePath, true);
                                 break;
@@ -294,6 +298,8 @@ public class TcpClient {
                     e.printStackTrace();
                 } catch (InterruptedException e) {
                     e.printStackTrace();
+                } finally {
+                    dos_Semaphore.release();
                 }
             }
         });
@@ -303,8 +309,10 @@ public class TcpClient {
 
     public void parseXML(File file) {
         itsEncodeFile = EncodeFile.xml2object(file, false);
+
         SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
-                "解析完成，正在查看是否拥有对自己有用的数据");
+                "解析完成对方xml完成");
+        //此log之后出现卡死的情况
         String fileName = itsEncodeFile.getFileName();
         String folderName = itsEncodeFile.getFolderName();
         ArrayList<File> folders = MyFileUtils.getListFolders(GlobalVar.getTempPath());
@@ -334,11 +342,17 @@ public class TcpClient {
 
 
         //把xml文件发给server
+        SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
+                "向对方发送自己的xml文件");
         String xmlFilePath = GlobalVar.g_ef.getStoragePath() + File.separator + "xml.txt";
         sendfile(xmlFilePath, false);
+        SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
+                "xml文件发送完成");
         //根据对方的xml文件查看是否拥有对自己有用的数据
         //如果有的话，则请求
         // 给服务器端发送文件请求
+        SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
+                "正在查看对方是否有对自己有用的数据");
         serviceAcquire();
     }
 
@@ -363,6 +377,7 @@ public class TcpClient {
             }
             SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
                     "对方拥有对我有用的数据，向对方发送文件请求");
+            //此log之后出现卡死的情况
             try {
                 dos_Semaphore.acquire();
                 dos.writeUTF(requestCode);
@@ -371,7 +386,11 @@ public class TcpClient {
                 e.printStackTrace();
             } catch (InterruptedException e) {
                 e.printStackTrace();
+            } finally {
+                dos_Semaphore.release();
             }
+            SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
+                    "文件请求发送完成");
         } else {
             SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
                     "对方没有对我有用的数据");
@@ -508,8 +527,9 @@ public class TcpClient {
             e.printStackTrace();
         } catch (NullPointerException e) {
             e.printStackTrace();
+        } finally {
+            dos_Semaphore.release();
         }
-
     }
 
     //一个循环检测线程   当检测到haveSendFile变量为false时，启动再编码
@@ -538,6 +558,8 @@ public class TcpClient {
                                         @Override
                                         public void run() {
                                             pieceFile.re_encodeFile();
+                                            //更改xml文件
+                                            GlobalVar.g_ef.object2xml();
                                         }
                                     }).start();
                                 }
@@ -551,11 +573,11 @@ public class TcpClient {
 //                            }
 //                        }
                     }
-                    try {
-                        Thread.sleep(30);
-                    } catch (InterruptedException e) {
-                        e.printStackTrace();
-                    }
+//                    try {
+//                        Thread.sleep(30);
+//                    } catch (InterruptedException e) {
+//                        e.printStackTrace();
+//                    }
                 }
             }
         }).start();
