@@ -66,7 +66,7 @@ public class WifiAdmin {
         //等待ap关闭
         while (apHelper.isApEnabled()) {
             try {
-                Thread.sleep(100);
+                Thread.sleep(10);
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
@@ -105,11 +105,31 @@ public class WifiAdmin {
 
 
     // 添加一个网络并连接
-    public void addNetwork(WifiConfiguration wcg) {
-        int wcgID = mWifiManager.addNetwork(wcg);
-        boolean b = mWifiManager.enableNetwork(wcgID, true);
-        System.out.println("a--" + wcgID);
-        System.out.println("b--" + b);
+    public void addNetwork(String ssid) {
+        WifiConfiguration tempConfig = isExsits(ssid);
+
+        if (tempConfig != null) {
+            // wifiManager.removeNetwork(tempConfig.networkId);
+            boolean b = mWifiManager.enableNetwork(tempConfig.networkId,
+                    true);
+        } else {
+            WifiConfiguration wifiConfig = CreateWifiInfo(ssid, Constant.AP_PASS_WORD, 3);
+            //
+            if (wifiConfig == null) {
+                return;
+            }
+            int netID = mWifiManager.addNetwork(wifiConfig);
+            boolean enabled = mWifiManager.enableNetwork(netID, true);
+            //Log.d(TAG, "enableNetwork status enable=" + enabled);
+            boolean connected = mWifiManager.reconnect();
+           // Log.d(TAG, "enableNetwork connected=" + connected);
+            System.out.println("a--" + netID);
+            System.out.println("b--" + enabled);
+        }
+//        int wcgID = mWifiManager.addNetwork(wcg);
+//        boolean b = mWifiManager.enableNetwork(wcgID, true);
+//        System.out.println("a--" + wcgID);
+//        System.out.println("b--" + b);
     }
 
     // 断开指定ID的网络
@@ -177,47 +197,50 @@ public class WifiAdmin {
         return config;
     }
 
-    //检查指定的SSID信息是否已经存在
-    //改为是否包含指定的ssid子串
-    private WifiConfiguration IsExsits(String SSID) {
-        try {
-            List<WifiConfiguration> existingConfigs = mWifiManager.getConfiguredNetworks();
-            for (WifiConfiguration existingConfig : existingConfigs) {
-                //多带一个引号  ""hanhai""
-                if (existingConfig.SSID.equals("\"" + SSID + "\"")) {
-                    return existingConfig;
-                }
-                //
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        } finally {
-            return null;
-        }
-    }
 
     //删除之前以后保存过的网络信息
-    private void deleteContainSSid() {
+    public void deleteContainSSid() {
         try {
             List<WifiConfiguration> existingConfigs = mWifiManager.getConfiguredNetworks();
             for (WifiConfiguration existingConfig : existingConfigs) {
                 String ssid = existingConfig.SSID;
-                if (existingConfig.SSID.contains(Constant.GENERAL_SUB_SSID)) {
-                    mWifiManager.removeNetwork(existingConfig.networkId);
+                if (ssid.contains(Constant.GENERAL_SUB_SSID)) {
+                    int networkId = existingConfig.networkId;
+                    mWifiManager.removeNetwork(networkId);
+                    mWifiManager.saveConfiguration();
                 }
             }
         } catch (Exception e) {
             e.printStackTrace();
         }
-    }
 
+    }
+    // 查看以前是否也配置过这个网络
+    private WifiConfiguration isExsits(String SSID) {
+        try {
+            List<WifiConfiguration> existingConfigs = mWifiManager
+                    .getConfiguredNetworks();
+            for (WifiConfiguration existingConfig : existingConfigs) {
+                if (existingConfig.SSID.equals("\"" + SSID + "\"")) {
+                    return existingConfig;
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
 
     //搜索是否存在指定ssid包含的网络，存在返回对应的ssid
     public String searchWifi() {
         //删除之前已经保存过得网络信息
         //避免其自动连接之前的ssid
         //让其能够根据策略连接指定的ssid
+        //安卓6.0以上无法删除之前保存的网络
+        //只能删除掉由本app创建的连接配置
         deleteContainSSid();
+
+        List<WifiConfiguration> existingConfigs = mWifiManager.getConfiguredNetworks();
         //String bssid = "";   //相同ssid按bssid来识别
         //在以保存的wifi信息中找ssid，若存在，则先删除
         //WifiConfiguration tempConfig = this.IsExsits(ssid);
@@ -306,4 +329,7 @@ public class WifiAdmin {
         }
         return false;
     }
+
+
+
 }

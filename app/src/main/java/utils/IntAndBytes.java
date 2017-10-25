@@ -167,4 +167,23 @@ public class IntAndBytes {
             return newIntArray;
         }
     }
+
+    //删除值为value的项
+    //返回删除后的数组
+    public static int[] intArrayReduce(int[] origin, int value) {
+        if (origin == null) {
+            return null;
+        }
+        int length = origin.length;
+        if (length == 1) {
+            return null;
+        }
+        int[] newIntArray = null;
+        for (int i = 0; i < length; ++i) {
+            if (origin[i] != value) {
+                newIntArray = intArrayGrow(newIntArray, origin[i]);
+            }
+        }
+        return newIntArray;
+    }
 }

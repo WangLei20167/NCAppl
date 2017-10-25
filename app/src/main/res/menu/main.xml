@@ -13,9 +13,8 @@
         android:title="打开工作目录" />
 
     <item
-        android:id="@+id/action_description"
+        android:id="@+id/action_clearTemp"
         android:orderInCategory="100"
-        android:title="参数说明"
-        app:showAsAction="never"
-        />
+        android:title="清空Temp目录"
+        app:showAsAction="never" />
 </menu>

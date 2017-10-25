@@ -82,6 +82,8 @@ public class EncodeFile {
 
     //对文件进行分片 分成每10M一个部分，在送去编码
     public void cutFile(final File originFile) {
+//        System.out.println("对文件进行分片--    " +
+//                LocalInfor.getCurrentTime("HH:mm:ss:SSS"));
         int fileLen = (int) originFile.length();
         int file_piece_len = 10 * 1024 * 1024;  //若是大于10M的文件，对文件进行分片，每片10M
         int piece_num = fileLen / file_piece_len + (fileLen % file_piece_len != 0 ? 1 : 0);
@@ -117,6 +119,8 @@ public class EncodeFile {
                 temp_files.add(piece_file);
             }
         }
+//        System.out.println("分片结束，开始编码--    " +
+//                LocalInfor.getCurrentTime("HH:mm:ss:SSS"));
         //为两个校验长度赋值
         //前几个部分文件校验长度
         int perLen = file_piece_len / nK + (file_piece_len % nK != 0 ? 1 : 0);
@@ -126,6 +130,7 @@ public class EncodeFile {
         rightFileLen2 = 1 + nK + rest_perLen;
 
         //对大文件片再进行分片
+        //编码：
         for (int i = 0; i < piece_num; ++i) {
             int rightFileLen;
             if (i == (piece_num - 1)) {
@@ -140,6 +145,13 @@ public class EncodeFile {
             //添加进List
             pieceFileList.add(pieceFile);
         }
+//        System.out.println("编码结束开始再编码--    " +
+//                LocalInfor.getCurrentTime("HH:mm:ss:SSS"));
+//        for(PieceFile pieceFile:pieceFileList){
+//            pieceFile.re_encodeFile();
+//        }
+//        System.out.println("再编码结束--    " +
+//                LocalInfor.getCurrentTime("HH:mm:ss:SSS"));
         MyFileUtils.deleteAllFile(dataTempPath, true);
         //设置变量
         CurrentParts = piece_num;
@@ -189,7 +201,12 @@ public class EncodeFile {
         }
         //合并文件
         //String outFilePath = storagePath + File.separator + fileName;
+        System.out.println("拼接开始--    " +
+                LocalInfor.getCurrentTime("HH:mm:ss:SSS"));
         MyFileUtils.mergeFiles(outFilePath, files);
+        System.out.println("拼接结束--    " +
+                LocalInfor.getCurrentTime("HH:mm:ss:SSS"));
+        //MyFileUtils.mergeFiles(outFilePath, files);
         //在此删除恢复回来的部分文件
         for (int i = 0; i < files.length; ++i) {
             File file = files[i];
@@ -277,7 +294,6 @@ public class EncodeFile {
         //恢复pieceFile的nK值
         for (PieceFile pieceFile : encodeFile.getPieceFileList()) {
             pieceFile.setnK(encodeFile.getnK());
-
         }
         //是否恢复所有文件路径
         if (recoverAllPath) {

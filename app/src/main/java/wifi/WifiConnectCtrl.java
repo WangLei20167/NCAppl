@@ -29,6 +29,10 @@ public class WifiConnectCtrl {
             String ssid = scanResult.SSID;
             //int lv0 = scanResult.level;
             int signalLevel = mWifiManager.calculateSignalLevel(scanResult.level, 5);
+            if (signalLevel < 2) {
+                //信号强度过弱，不连接
+                continue;
+            }
             boolean have = false;
             for (SSIDInfor ssidInfor0 : ssidInforList) {
                 if (ssidInfor0.getStrSSID().equals(ssid)) {
@@ -62,10 +66,15 @@ public class WifiConnectCtrl {
                     int s0 = ssidInfor.getSignalWeight();
                     int s1 = selectSSIDInfor.getSignalWeight();
                     if (ssidInfor.getSignalWeight() > selectSSIDInfor.getSignalWeight()) {
+
                         selectSSIDInfor = ssidInfor;
                     }
                 }
             }
+        }
+        //没找到
+        if(selectSSIDInfor==null){
+            return null;
         }
         selectSSIDInfor.setWeight(0);
         //相当于连过一次之后，在之后的5次尝试连接中，处于权重劣势

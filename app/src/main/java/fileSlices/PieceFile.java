@@ -12,6 +12,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
 
 import nc.NCUtils;
 import utils.IntAndBytes;
@@ -299,7 +300,11 @@ public class PieceFile {
             b[0] = (byte) nK;
             b[m + 1] = 1;
             // String fileName = (i + 1) + "_" + (m + 1) + ".nc";
-            String fileName = pieceNo + "." + LocalInfor.getCurrentTime("MMddHHmmssSSS") + ".nc";
+            //生成一个随机四位数，保证文件名的唯一性
+            Random random = new Random(System.currentTimeMillis());
+            //产生一个1000到9999的四位随机数
+            int random4Num = 1000 + random.nextInt(9000);
+            String fileName = pieceNo + "." + LocalInfor.getCurrentTime("MMddHHmmssSSS") + random4Num + ".nc";
             File piece_file = MyFileUtils.creatFile(encodeFilePath, fileName);
             try {
                 FileOutputStream fos = new FileOutputStream(piece_file);
@@ -323,28 +328,44 @@ public class PieceFile {
     //需要在一个独立线程中运行
     //因为会分配较大内存，所以规定每次之后一个可以进入
     //返回再编码文件的路径
-    public synchronized String re_encodeFile() {
-//        if (isReencoding) {
-//            return null;
-//        }
+    public String re_encodeFile() {
+        if (isReencoding) {
+            System.out.println("(" + LocalInfor.getCurrentTime("HH:mm:ss:SSS") + ")" +
+                    pieceNo + "其他线程正在编码");
+            return null;
+        }
         isReencoding = true;
         //从编码文件路径中取出文件
         List<File> fileList = getRightLenFileList();
         if (fileList == null) {
             //检查长度时出错
+            System.out.println("(" + LocalInfor.getCurrentTime("HH:mm:ss:SSS") + ")" +
+                    pieceNo + "没有文件可供再编码");
+            isReencoding = false;
             return null;
         }
         if (fileList.size() == 0) {
+            System.out.println("(" + LocalInfor.getCurrentTime("HH:mm:ss:SSS") + ")" +
+                    pieceNo + "没有文件可供再编码");
+            isReencoding = false;
             return null;
         }
-        System.out.println("("+LocalInfor.getCurrentTime("HH:mm:ss:SSS")+")"+
+        System.out.println("(" + LocalInfor.getCurrentTime("HH:mm:ss:SSS") + ")" +
                 pieceNo + "部分文件在执行再编码");
         int fileNum = fileList.size();
         //如果只有一个编码文件的话，那就不用再编码
         if (fileNum == 1) {
             File file = fileList.get(0);
+            sendFilePath = file.getPath();
+            haveSendFile = true;
+            isReencoding = false;
+            System.out.println("(" + LocalInfor.getCurrentTime("HH:mm:ss:SSS") + ")" +
+                    pieceNo + "再编码完成");
             return file.getPath();
         }
+
+//        System.out.println("开始从文件读取数据--"+ "    " +
+//                LocalInfor.getCurrentTime("HH:mm:ss:SSS"));
         //注意：用于再编码的文件长度必定都是一样的
         int fileLen = (int) (fileList.get(0).length());
         //用于存文件数组  一维数组存储
@@ -362,16 +383,26 @@ public class PieceFile {
                 //  return null;
             }
         }
+//        System.out.println("读文件结束，开始再编码--"+ "    " +
+//                LocalInfor.getCurrentTime("HH:mm:ss:SSS"));
         //再编码
         byte[] reEncodeData = NCUtils.reencode(fileData, fileNum, fileLen);
+//        System.out.println("再编码结束，开始写文件--"+ "    " +
+//                LocalInfor.getCurrentTime("HH:mm:ss:SSS"));
 
-        String fileName = pieceNo + "." + LocalInfor.getCurrentTime("MMddHHmmssSSS") + ".nc"; //pieceNo.time.re  //格式
+        //生成一个随机四位数，保证文件名的唯一性
+        Random random = new Random(System.currentTimeMillis());
+        //产生一个1000到9999的四位随机数
+        int random4Num = 1000 + random.nextInt(9000);
+        String fileName = pieceNo + "." + LocalInfor.getCurrentTime("MMddHHmmssSSS") + random4Num + ".nc"; //pieceNo.time.re  //格式
         File re_encodeFile = MyFileUtils.writeToFile(re_encodeFilePath, fileName, reEncodeData);
+//        System.out.println("写文件结束--"+ "    " +
+//                LocalInfor.getCurrentTime("HH:mm:ss:SSS"));
         sendFilePath = re_encodeFile.getPath();
         haveSendFile = true;
         isReencoding = false;
         //
-        System.out.println("("+LocalInfor.getCurrentTime("HH:mm:ss:SSS")+")"+
+        System.out.println("(" + LocalInfor.getCurrentTime("HH:mm:ss:SSS") + ")" +
                 pieceNo + "再编码完成");
         return re_encodeFile.getPath();
     }
@@ -388,6 +419,8 @@ public class PieceFile {
             //文件数目不足，无法解码
             return false;
         }
+//        System.out.println("开始读文件--"+"    " +
+//                LocalInfor.getCurrentTime("HH:mm:ss:SSS"));
         int fileLen = (int) fileList.get(0).length();
         //用于存文件数组  存入一维数组
         byte[] fileData = new byte[nK * fileLen];   //如果文件很多，也只需nK个文件
@@ -404,15 +437,22 @@ public class PieceFile {
                 return false;
             }
         }
+//        System.out.println("读文件结束，开始解码--"+"    " +
+//                LocalInfor.getCurrentTime("HH:mm:ss:SSS"));
         //int col = fileLen - 1 - nK;
         //NCUtils.nc_acquire();
         byte[] origin_data = NCUtils.decode(fileData, nK, fileLen);
+//        System.out.println("解码完成，开始写入文件--"+"    " +
+//                LocalInfor.getCurrentTime("HH:mm:ss:SSS"));
         //NCUtils.nc_release();
         if (origin_data == null) {
             return false;
         }
         //写入文件
         MyFileUtils.writeToFile(pieceFilePath, pieceNo + ".decode", origin_data);
+//        System.out.println("写入文件结束--"+"    " +
+//                LocalInfor.getCurrentTime("HH:mm:ss:SSS"));
+
         return true;
     }
 

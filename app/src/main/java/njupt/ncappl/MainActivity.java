@@ -3,22 +3,26 @@ package njupt.ncappl;
 import android.app.Activity;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.Message;
 import android.os.Process;
+import android.support.annotation.NonNull;
 import android.support.v7.app.AppCompatActivity;
 import android.text.InputType;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.widget.Button;
+import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.afollestad.materialdialogs.DialogAction;
 import com.afollestad.materialdialogs.MaterialDialog;
 import com.mauiie.aech.AECHConfiguration;
 import com.mauiie.aech.AECrashHelper;
@@ -33,9 +37,11 @@ import java.util.Timer;
 import java.util.TimerTask;
 
 import appData.GlobalVar;
+import cn.fanrunqi.waveprogress.WaveProgressView;
 import nc.NCUtils;
 import runtimepermissions.PermissionsManager;
 import runtimepermissions.PermissionsResultAction;
+import utils.LocalInfor;
 import wifi.APHelper;
 import connect.Constant;
 import connect.TcpClient;
@@ -67,6 +73,16 @@ public class MainActivity extends AppCompatActivity {
 
     TextView tv_promptMsg;
     ScrollView scrollView;
+    //进度球布局
+    LinearLayout layout_wavePro;
+    //当新的显示进度小于老进度时，要启用重绘
+    int oldProgress = 0;
+    WaveProgressView waveProgressView;
+    TextView tv_fileName;
+    Button bt_modeSwitch;
+
+    Button bt_openServer;
+    Button bt_openClient;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -97,8 +113,16 @@ public class MainActivity extends AppCompatActivity {
 
         tv_promptMsg = (TextView) findViewById(R.id.tv_promptMsg);
         scrollView = (ScrollView) findViewById(R.id.scrollView);
+        layout_wavePro = (LinearLayout) findViewById(R.id.layout_wavePro);
+        waveProgressView = (WaveProgressView) findViewById(R.id.waveProgressbar);
+        waveProgressView.setWaveColor("#5b9ef4");
+        waveProgressView.setText("#FFFF00", 50);
+
+        tv_fileName = (TextView) findViewById(R.id.tv_fileName);
+        bt_modeSwitch = (Button) findViewById(R.id.bt_modeSwitch);
+
         //服务器按钮
-        Button bt_openServer = (Button) findViewById(R.id.bt_openServer);
+        bt_openServer = (Button) findViewById(R.id.bt_openServer);
         bt_openServer.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
@@ -108,7 +132,7 @@ public class MainActivity extends AppCompatActivity {
             }
         });
         //客户端按钮
-        Button bt_openClient = (Button) findViewById(R.id.bt_openClient);
+        bt_openClient = (Button) findViewById(R.id.bt_openClient);
         bt_openClient.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
@@ -153,6 +177,11 @@ public class MainActivity extends AppCompatActivity {
                                  **/
                                 String xmlFilePath = GlobalVar.getTempPath() + File.separator + text + File.separator + "xml.txt";
                                 GlobalVar.g_ef = EncodeFile.xml2object(xmlFilePath, true);
+                                if (GlobalVar.g_ef != null) {
+                                    SendMessage(MsgValue.UPDATE_WAVE_PROGRESS, 0, 0, null);
+                                    SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
+                                            "已选择" + GlobalVar.g_ef.getFileName());
+                                }
                                 return true;
                             }
                         })
@@ -160,19 +189,63 @@ public class MainActivity extends AppCompatActivity {
                         .show();
             }
         });
+
+        File folder = new File(GlobalVar.getTempPath());
+        if (folder.exists()) {
+            int length = (int) folder.length();
+            if (length > (Math.pow(2, 30) / 2)) {
+                //如果文件夹下大于512M则提示删除
+                new MaterialDialog.Builder(this)
+                        .title("提示")
+                        .content("Temp文件夹大于512M，是否清空Temp目录？")
+                        .positiveText("确认")
+                        .onPositive(new MaterialDialog.SingleButtonCallback() {
+                            @Override
+                            public void onClick(@NonNull MaterialDialog dialog, @NonNull DialogAction which) {
+                                // TODO
+                                MyFileUtils.deleteAllFile(GlobalVar.getTempPath(), false);
+                                Toast.makeText(MainActivity.this, "Temp目录下文件已清空", Toast.LENGTH_SHORT).show();
+                            }
+                        })
+                        .negativeText("取消")
+                        .show();
+            }
+        }
     }
 
     //测试方法
     public void onTest(View view) {
         if (GlobalVar.g_ef != null) {
-            for (final PieceFile pieceFile : GlobalVar.g_ef.getPieceFileList()) {
-                new Thread(new Runnable() {
-                    @Override
-                    public void run() {
-                        pieceFile.re_encodeFile();
-                    }
-                }).start();
-            }
+            GlobalVar.g_ef.recoveryFile();
+//            PieceFile pieceFile=GlobalVar.g_ef.getPieceFileList().get(0);
+//            pieceFile.decode_pfile();
+//            for (final PieceFile pieceFile : GlobalVar.g_ef.getPieceFileList()) {
+//                new Thread(new Runnable() {
+//                    @Override
+//                    public void run() {
+//                        pieceFile.re_encodeFile();
+//                    }
+//                }).start();
+//            }
+        }
+    }
+
+    public void onModeSwitch(View view) {
+        String mode = bt_modeSwitch.getText().toString();
+        //1、按钮上是运行模式
+        //点击后切换向运行模式
+        //2、按钮上是调试模式
+        //点击后就切换向调试模式
+        if (mode.equals(getString(R.string.run_mode))) {
+            //切换向运行模式
+            scrollView.setVisibility(View.GONE);
+            layout_wavePro.setVisibility(View.VISIBLE);
+            bt_modeSwitch.setText(getString(R.string.debug_mode));
+        } else if (mode.equals(getString(R.string.debug_mode))) {
+            //切换向调试模式
+            layout_wavePro.setVisibility(View.GONE);
+            scrollView.setVisibility(View.VISIBLE);
+            bt_modeSwitch.setText(getString(R.string.run_mode));
         }
     }
 
@@ -180,9 +253,13 @@ public class MainActivity extends AppCompatActivity {
     public volatile boolean serverLocked = false;
 
     public void openServer(final boolean auto) {
+//        SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
+//                "普通2AP开始" + "    " +
+//                        LocalInfor.getCurrentTime("HH:mm:ss:SSS"));
         if (serverLocked) {
             return;
         }
+        SendMessage(MsgValue.SERVER_FLAG, 0, 0, null);
         //先要执行打开ap操作
         //开启AP
         new Thread(new Runnable() {
@@ -198,6 +275,13 @@ public class MainActivity extends AppCompatActivity {
                 tcpClient.closeSocket();
                 //关闭server的操作
                 tcpSvr.closeServer();
+                //等待client开锁后在向下执行
+                if (clientLocked) {
+                    SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0, "需等待client状态关闭后继续");
+                }
+                while (clientLocked) {
+
+                }
                 if (GlobalVar.g_ef == null) {
                     SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0, "GlobalVar.g_ef变量为null");
                     //指令更为开启client状态
@@ -223,6 +307,13 @@ public class MainActivity extends AppCompatActivity {
                 if (apHelper.setWifiApEnabled(APHelper.createWifiCfg(), true)) {
                     SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0, "AP打开成功");
                     //执行打开server的动作
+                    //等待打开
+//                    while ((!apHelper.isApEnabled())) {
+//
+//                    }
+//                    SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
+//                            "普通2AP开始" + "    " +
+//                                    LocalInfor.getCurrentTime("HH:mm:ss:SSS"));
                     tcpSvr.openServerSocket(auto);
                 } else {
                     SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0, "AP打开失败");
@@ -238,9 +329,13 @@ public class MainActivity extends AppCompatActivity {
     public volatile boolean clientLocked = false;
 
     public void openClient() {
+//        SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
+//                "AP2普通开始" + "    " +
+//                LocalInfor.getCurrentTime("HH:mm:ss:SSS"));
         if (clientLocked) {
             return;
         }
+        SendMessage(MsgValue.CLIENT_FLAG, 0, 0, null);
         new Thread(new Runnable() {
             @Override
             public void run() {
@@ -269,16 +364,21 @@ public class MainActivity extends AppCompatActivity {
                 };
                 Random random = new Random(System.currentTimeMillis());
                 int diff = random.nextInt(10);
-                long delay = (15 + diff) * 1000;
+                long delay = (20 + diff) * 1000;
                 //如果delay秒后还是无法连接wifi，则尝试切换向AP
                 timer = new Timer();
                 timer.schedule(mTimerTask, delay);
+                //打开wifi
+                wifiAdmin.openWifi();
+//                SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
+//                        "AP2普通结束" + "    " +
+//                                LocalInfor.getCurrentTime("HH:mm:ss:SSS"));
 
                 SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0, "正在搜索连接指定wifi");
                 SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0, "连接超时" + delay / 1000 + "秒将尝试切换为AP");
                 while (!needLeave) {
                     //此处做打开wifi的操作
-                    wifiAdmin.openWifi();
+                    //wifiAdmin.openWifi();
                     String ssid = wifiAdmin.searchWifi();
                     if (ssid == null) {
                         System.out.println("查找指定ssid失败");
@@ -290,12 +390,15 @@ public class MainActivity extends AppCompatActivity {
                     }
                     //如果当前wifi是连接状态，则断开当前连接
                     if (wifiAdmin.isWifiConnected()) {
-                        wifiAdmin.disconnectWifi();
+                        if (!(wifiAdmin.currentConnectSSID().equals(ssid))) {
+                            wifiAdmin.disconnectWifi();
+                            //连接网络的操作
+                            wifiAdmin.addNetwork(ssid);
+                        }
+                    } else {
+                        //连接网络的操作
+                        wifiAdmin.addNetwork(ssid);
                     }
-                    //连接网络的操作
-                    wifiAdmin.addNetwork(
-                            wifiAdmin.CreateWifiInfo(ssid, Constant.AP_PASS_WORD, 3)
-                    );
                     //等待连接的时间为5s
                     // Starting time.
                     long startMili = System.currentTimeMillis();
@@ -304,7 +407,7 @@ public class MainActivity extends AppCompatActivity {
                         //wifiAdmin.currentConnectSSID().equals(ssid)
                         //等待连接
                         try {
-                            Thread.sleep(100);
+                            Thread.sleep(10);
                         } catch (InterruptedException e) {
                             e.printStackTrace();
                         }
@@ -401,6 +504,8 @@ public class MainActivity extends AppCompatActivity {
                     //encodeFile.recoveryFile();
                     SendMessage(MsgValue.TELL_ME_SOME_INFOR, 0, 0,
                             "编码完成");
+
+                    SendMessage(MsgValue.UPDATE_WAVE_PROGRESS, 0, 0, null);
                 }
             }).start();
         }
@@ -420,6 +525,24 @@ public class MainActivity extends AppCompatActivity {
                     //滚动到最下面
                     scrollView.fullScroll(ScrollView.FOCUS_DOWN);
                     break;
+                case MsgValue.UPDATE_WAVE_PROGRESS:
+                    if (GlobalVar.g_ef != null) {
+                        int currentNum = GlobalVar.g_ef.getCurrentSmallPiece();
+                        int totalNum = GlobalVar.g_ef.getTotalSmallPiece();
+                        String fileName = GlobalVar.g_ef.getFileName();
+                        //进度
+                        int progress = (int) (((float) currentNum / totalNum) * 100);
+                        //
+                        if (progress < oldProgress) {
+                            //重绘
+                            waveProgressView.requestLayout();
+                            waveProgressView.invalidate();
+                        }
+                        oldProgress = progress;
+                        waveProgressView.setCurrent(progress, currentNum + "/" + totalNum);
+                        tv_fileName.setText(fileName);
+                    }
+                    break;
                 //client切换向server
                 case MsgValue.CLIENT_2_SERVER:
                     //测试encodeFile变量
@@ -436,6 +559,14 @@ public class MainActivity extends AppCompatActivity {
                 case MsgValue.DECODE_SUCCESS_OPEN_FILE:
                     System.out.println("正在打开文件");
                     MyFileUtils.openFile(msg.obj, MainActivity.this);
+                    break;
+                case MsgValue.SERVER_FLAG:
+                    bt_openClient.setTextColor(Color.BLACK);
+                    bt_openServer.setTextColor(Color.BLUE);
+                    break;
+                case MsgValue.CLIENT_FLAG:
+                    bt_openServer.setTextColor(Color.BLACK);
+                    bt_openClient.setTextColor(Color.BLUE);
                     break;
                 default:
                     break;
@@ -477,6 +608,8 @@ public class MainActivity extends AppCompatActivity {
             if (apHelper.isApEnabled()) {
                 apHelper.setWifiApEnabled(null, false);
             }
+            //删除wifi配置
+            wifiAdmin.deleteContainSSid();
             //执行退出操作,并释放资源
             finish();
             //Dalvik VM的本地方法完全退出app
@@ -534,10 +667,25 @@ public class MainActivity extends AppCompatActivity {
                 intent.putExtra("data_path", GlobalVar.getDataFolderPath());
                 startActivity(intent);
                 break;
-            case R.id.action_description:
-                Toast.makeText(this, "显示软件信息", Toast.LENGTH_SHORT).show();
+            case R.id.action_clearTemp:
+
+                new MaterialDialog.Builder(this)
+                        .title("提示")
+                        .content("是否清空Temp目录？")
+                        .positiveText("确认")
+                        .onPositive(new MaterialDialog.SingleButtonCallback() {
+                            @Override
+                            public void onClick(@NonNull MaterialDialog dialog, @NonNull DialogAction which) {
+                                // TODO
+                                MyFileUtils.deleteAllFile(GlobalVar.getTempPath(), false);
+                                Toast.makeText(MainActivity.this, "Temp目录下文件已清空", Toast.LENGTH_SHORT).show();
+                            }
+                        })
+                        .negativeText("取消")
+                        .show();
                 break;
             default:
+                break;
         }
         return true;
     }

@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">NCAppl</string>
+    <string name="debug_mode">调试模式</string>
+    <string name="run_mode">运行模式</string>
 </resources>

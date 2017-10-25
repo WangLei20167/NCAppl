@@ -57,9 +57,9 @@ public class APHelper {
             mWifiManager.setWifiEnabled(false);
         }
         //等待wifi关闭
-        while (mWifiManager.isWifiEnabled()){
+        while (mWifiManager.isWifiEnabled()) {
             try {
-                Thread.sleep(100);
+                Thread.sleep(10);
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
@@ -76,6 +76,7 @@ public class APHelper {
         } catch (IllegalAccessException e) {
             e.printStackTrace();
         }
+
         return result;
     }
 

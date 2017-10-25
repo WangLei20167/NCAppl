@@ -44,6 +44,9 @@ dependencies {
     compile 'com.afollestad.material-dialogs:core:0.9.4.5'
     //全局抓获异常
     compile 'com.mauiie.aech:AECrashHandler:0.0.1'
+    //进度球
+    compile 'cn.fanrunqi:waveprogress:1.0.1'
+
 }
 
 

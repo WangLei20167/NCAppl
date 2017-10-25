@@ -50,7 +50,7 @@ public class GlobalVar {
         }
         //设备IMEI码
         IMEI = LocalInfor.getDeviceID(context);
-        SSID_IMEI = Constant.SUB_SSID + IMEI;
+        SSID_IMEI = Constant.SUB_SSID + IMEI + LocalInfor.getCurrentTime("HHmmss");
     }
 
     //以下是Getter和Setter方法
@@ -73,6 +73,7 @@ public class GlobalVar {
     public static String getSsidImei() {
         return SSID_IMEI;
     }
+
     public static String getLogPath() {
         return LogPath;
     }
