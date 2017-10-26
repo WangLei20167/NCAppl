@@ -82,7 +82,7 @@ public class TcpClient {
                 socket = new Socket(Constant.TCP_ServerIP, Constant.TCP_ServerPORT);
                 //socket.connect(endpoint);  //连接3秒超时
                 //设置读超时 10s
-                //socket.setSoTimeout(20 * 1000);
+                socket.setSoTimeout(20 * 1000);
 
             } catch (IOException e) {
                 System.out.println("连接socket失败");
